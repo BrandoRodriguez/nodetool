@@ -45,7 +45,18 @@ describe("OrcaPolicy.checkCommand", () => {
 
   it("only lets exec run read subcommands", () => {
     expect(() => policy().checkCommand(["exec", "--command", "get text #a", ...page])).not.toThrow();
-    for (const sub of ["cookies", "storage local", "download a /tmp/x", "screenshot #a /tmp/x.png", "eval 1"]) {
+    for (const sub of [
+      "cookies",
+      "storage local",
+      "download a /tmp/x",
+      "screenshot #a /tmp/x.png",
+      "eval 1",
+      "get cdp-url",
+      "get value #password",
+      "get",
+      "is",
+      "get text #a --session other"
+    ]) {
       expect(() => policy().checkCommand(["exec", "--command", sub, ...page])).toThrow(OrcaPolicyError);
     }
   });

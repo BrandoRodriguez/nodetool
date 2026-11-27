@@ -65,8 +65,17 @@ const MUTATING = new Set([
   "exec"
 ]);
 
-/** agent-browser subcommands `exec` may run: reads and history only, no files. */
-const EXEC_ALLOWED = new Set(["get", "is", "forward"]);
+/**
+ * agent-browser commands `exec` may run, with the second word each allows.
+ * Reads and history only, no files. `get cdp-url` is left out on purpose: it
+ * hands out Orca's private CDP endpoint, which would bypass this policy.
+ * `get value` is left out too: it reads what the user typed, passwords included.
+ */
+const EXEC_ALLOWED = new Map<string, ReadonlySet<string> | null>([
+  ["get", new Set(["text", "html", "attr", "title", "url", "count", "box", "styles"])],
+  ["is", new Set(["visible", "enabled", "checked"])],
+  ["forward", null]
+]);
 
 /** Flags that would widen the target beyond one workspace. */
 const FORBIDDEN_FLAG_VALUES = new Map([["--worktree", new Set(["all", "active", "current"])]]);
@@ -190,9 +199,16 @@ export class OrcaPolicy {
   }
 
   private checkExec(command: string): void {
-    const [sub = ""] = command.trim().split(/\s+/);
+    const [sub = "", second = ""] = command.trim().split(/\s+/);
     if (!EXEC_ALLOWED.has(sub)) {
       throw new OrcaPolicyError(`exec ${sub || "(empty)"} is not allowed by the factory transport`);
+    }
+    const allowed = EXEC_ALLOWED.get(sub);
+    if (allowed && !allowed.has(second)) {
+      throw new OrcaPolicyError(`exec ${sub} ${second || "(empty)"} is not allowed by the factory transport`);
+    }
+    if (/--session\b/.test(command)) {
+      throw new OrcaPolicyError("exec may not choose an agent-browser session");
     }
   }
 
