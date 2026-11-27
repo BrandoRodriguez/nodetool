@@ -4,14 +4,14 @@
  * Reads a `blob:`/`<video>`/`<audio>`/`<img>` source from the page, fetches it
  * to an ArrayBuffer inside the page context, and returns base64 bytes plus the
  * resolved MIME type. This is the universally-available rung of the capture
- * ladder (it uses only `CdpPage.evaluate`).
+ * ladder (it uses only `BrowserPage.evaluate`).
  */
 
 import type {
   BrowserCaptureMediaInput,
   BrowserCaptureMediaRaw
 } from "./schemas.js";
-import type { CdpPage } from "./cdp-page.js";
+import type { BrowserPage } from "./browser-page.js";
 
 /** Page-side capture payload returned by the injected function. */
 interface InPageCaptureResult {
@@ -26,7 +26,7 @@ interface InPageCaptureResult {
  * actually-loaded resolution variant is captured.
  */
 async function resolveElementSource(
-  page: CdpPage,
+  page: BrowserPage,
   index: number,
   mediaType: BrowserCaptureMediaInput["media_type"]
 ): Promise<string | null> {
@@ -70,7 +70,7 @@ function fallbackMime(
  * Runs in the page so `blob:` URLs and same-origin credentials resolve.
  */
 async function fetchToBase64(
-  page: CdpPage,
+  page: BrowserPage,
   url: string
 ): Promise<InPageCaptureResult | null> {
   return page.evaluate(async (target: string) => {
@@ -101,7 +101,7 @@ async function fetchToBase64(
  * @throws if no source URL can be resolved or the fetch fails.
  */
 export async function captureMediaInPage(
-  page: CdpPage,
+  page: BrowserPage,
   input: BrowserCaptureMediaInput
 ): Promise<BrowserCaptureMediaRaw> {
   let url = input.url ?? input.resource_url ?? null;

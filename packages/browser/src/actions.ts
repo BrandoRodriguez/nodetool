@@ -47,9 +47,14 @@ import type {
 } from "./schemas.js";
 import { Buffer } from "node:buffer";
 import { createLogger } from "@nodetool-ai/config";
-import type { CdpPage } from "./cdp-page.js";
+import type { BrowserPage } from "./browser-page.js";
 import { captureMediaInPage } from "./capture.js";
 import { uploadAssetToInput } from "./upload.js";
+import {
+  BUILTIN_BROWSER_TRANSPORTS,
+  loadBrowserTransport,
+  type BrowserTransportSession
+} from "./transport-registry.js";
 
 const log = createLogger("nodetool.browser");
 
@@ -112,11 +117,13 @@ function attachResponseTracker(client: CaptureCdpClient): ResponseTracker {
 }
 
 interface BrowserState {
-  page: CdpPage;
+  page: BrowserPage;
   close: () => Promise<void>;
   consoleMessages: BrowserConsoleMessage[];
   /** How the page was built — determines the {@link browserRestart} strategy. */
-  transport: BrowserTransport;
+  transport: string;
+  /** The session of a registered transport; null for the built-in ones. */
+  registered: BrowserTransportSession | null;
   /**
    * Tracks finished network responses for capture_media's rung-1 lookup. Null
    * when the underlying client doesn't expose the Network domain we need.
@@ -135,12 +142,19 @@ let transportOverride: BrowserTransport | null = null;
  * Resolve the transport for the shared browser session.
  *
  * The extension transport drives the user's real, logged-in Chrome through the
- * native messaging host's socket. It is selected by `NODETOOL_BROWSER_TRANSPORT`.
+ * native messaging host's socket. It is selected by `NODETOOL_BROWSER_TRANSPORT`,
+ * which can also name a transport from the registry (see `transport-registry.ts`).
  */
-function resolveTransport(): BrowserTransport {
+function resolveTransport(): string {
   if (transportOverride) return transportOverride;
-  if (process.env.NODETOOL_BROWSER_TRANSPORT === "extension") return "extension";
-  return "local";
+  const configured = process.env.NODETOOL_BROWSER_TRANSPORT?.trim();
+  if (configured === "extension") return "extension";
+  if (!configured || configured === "local") return "local";
+  return configured;
+}
+
+function isBuiltinTransport(transport: string): boolean {
+  return (BUILTIN_BROWSER_TRANSPORTS as readonly string[]).includes(transport);
 }
 
 /** Whether a native host is accepting connections, meaning the extension is running. */
@@ -150,12 +164,12 @@ async function extensionConnected(): Promise<boolean> {
 }
 
 /**
- * Wire the console ring buffer to a {@link CdpPage}. Console events flow through
- * the same `CdpPage` path regardless of transport, so this is shared verbatim
- * between the local and extension branches.
+ * Wire the console ring buffer to a {@link BrowserPage}. Console events flow
+ * through the same page path regardless of transport, so this is shared
+ * verbatim between every branch.
  */
 function attachConsoleBuffer(
-  page: CdpPage,
+  page: BrowserPage,
   consoleMessages: BrowserConsoleMessage[]
 ): void {
   page.on("console", (msg) => {
@@ -190,6 +204,24 @@ async function ensureState(): Promise<BrowserState> {
   const transport = resolveTransport();
   const consoleMessages: BrowserConsoleMessage[] = [];
 
+  if (!isBuiltinTransport(transport)) {
+    const factory = await loadBrowserTransport(transport);
+    const session = await factory.open({ viewport: { width: 1280, height: 900 } });
+    log.info("Registered browser transport selected", { transport });
+    attachConsoleBuffer(session.page, consoleMessages);
+    state = {
+      page: session.page,
+      close: () => session.close(),
+      consoleMessages,
+      transport,
+      registered: session,
+      captureClient: null,
+      responseTracker: null
+    };
+    hookShutdown();
+    return state;
+  }
+
   if (transport === "extension") {
     const { createExtensionPage } = await import("./extension/page.js");
     log.info("Extension transport selected", {
@@ -218,6 +250,7 @@ async function ensureState(): Promise<BrowserState> {
       close: handle.close,
       consoleMessages,
       transport,
+      registered: null,
       captureClient,
       responseTracker: attachResponseTracker(captureClient)
     };
@@ -244,6 +277,7 @@ async function ensureState(): Promise<BrowserState> {
     close: session.close,
     consoleMessages,
     transport,
+    registered: null,
     captureClient,
     responseTracker: attachResponseTracker(captureClient)
   };
@@ -362,7 +396,13 @@ export async function browserStatus(): Promise<BrowserStatusOutput> {
     transport === "extension" ? await extensionConnected() : null;
 
   let hint: string | null = null;
-  if (transport === "local") {
+  if (!isBuiltinTransport(transport)) {
+    try {
+      hint = (await loadBrowserTransport(transport)).describe();
+    } catch (err) {
+      hint = err instanceof Error ? err.message : String(err);
+    }
+  } else if (transport === "local") {
     hint =
       "Driving a headless Chrome launched by this process — the page carries " +
       "no login. Call browser_restart with transport:'extension' to drive " +
@@ -515,6 +555,11 @@ export async function browserCaptureMedia(
   input: BrowserCaptureMediaInput
 ): Promise<BrowserCaptureMediaRaw> {
   const s = await ensureState();
+
+  // A registered transport may read bytes its own way (bounded, chunked).
+  if (s.registered?.captureMedia) {
+    return s.registered.captureMedia(input);
+  }
 
   // Rung 1: a response body the page already fetched, addressed by URL.
   const resourceUrl = input.resource_url;

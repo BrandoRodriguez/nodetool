@@ -46,6 +46,7 @@
     "packages/storage",
     "packages/config",
     "packages/browser",
+    "packages/factory-browser-orca",
     "packages/deploy",
     "packages/compute",
     "packages/kie-codegen",

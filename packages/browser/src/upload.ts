@@ -24,7 +24,7 @@ import { promises as fs, rmSync } from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { randomUUID } from "node:crypto";
-import type { CdpPage } from "./cdp-page.js";
+import type { BrowserPage } from "./browser-page.js";
 
 /**
  * Temp dirs holding files handed to `DOM.setFileInputFiles`. Chrome reads the
@@ -64,7 +64,7 @@ const UPLOAD_TAG_ATTR = "data-nt-upload";
  * next view.
  */
 async function resolveInputSelector(
-  page: CdpPage,
+  page: BrowserPage,
   input: BrowserUploadAssetRaw
 ): Promise<string> {
   if (input.index !== undefined) {
@@ -99,7 +99,7 @@ async function resolveInputSelector(
  * removed afterwards. Throws if the path isn't reachable by this Chrome.
  */
 async function uploadNative(
-  page: CdpPage,
+  page: BrowserPage,
   selector: string,
   input: BrowserUploadAssetRaw,
   bytes: Buffer
@@ -119,7 +119,7 @@ async function uploadNative(
  * entirely in-page so it works without a shared filesystem.
  */
 async function uploadDataTransfer(
-  page: CdpPage,
+  page: BrowserPage,
   selector: string,
   input: BrowserUploadAssetRaw
 ): Promise<void> {
@@ -153,7 +153,7 @@ async function uploadDataTransfer(
  * and falling back to the in-page DataTransfer injection automatically.
  */
 export async function uploadAssetToInput(
-  page: CdpPage,
+  page: BrowserPage,
   input: BrowserUploadAssetRaw
 ): Promise<BrowserUploadAssetOutput> {
   const bytes = Buffer.from(input.file_b64, "base64");

@@ -353,7 +353,9 @@ closed export manifest),
 app, or bundled `./assets/` paths in a standalone export),
 `packages/image-nodes/src/nodes/image-io.ts` (behind `!IS_NODE`),
 `packages/core-nodes/src/nodes/fake-media.ts`,
-`packages/browser/src/capture.ts` (inside `page.evaluate`).
+`packages/browser/src/capture.ts` (inside `page.evaluate`),
+`packages/factory-browser-orca/src/media.ts` (inside the Orca tab through
+`orca eval`, body capped at `FACTORY_ORCA_MAX_MEDIA_BYTES`).
 The standalone 3D export applies `connect-src 'self'` CSP. Where redirects are
 allowed, the browser follows them subject to that policy and its own network
 restrictions. These fetches open no server-side socket.

@@ -47,6 +47,23 @@ export {
 
 export * from "./schemas.js";
 
+export type {
+  BrowserPage,
+  BrowserPageFunction,
+  BrowserPageConsoleMessage,
+  BrowserWaitUntil
+} from "./browser-page.js";
+export {
+  BUILTIN_BROWSER_TRANSPORTS,
+  registerBrowserTransport,
+  unregisterBrowserTransport,
+  loadBrowserTransport,
+  parseTransportModules,
+  type BrowserTransportCapabilities,
+  type BrowserTransportSession,
+  type BrowserTransportFactory
+} from "./transport-registry.js";
+
 export { captureMediaInPage } from "./capture.js";
 export { uploadAssetToInput } from "./upload.js";
 
