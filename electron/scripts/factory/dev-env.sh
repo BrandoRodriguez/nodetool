@@ -20,6 +20,13 @@ FACTORY_REPO_DIR="$(cd "$(dirname "${factory_env_file}")/../../.." && pwd)"
 unset factory_env_file
 export FACTORY_REPO_DIR
 export FACTORY_DEV_ENV_DIR="${FACTORY_DEV_ENV_DIR:-$(cd "${FACTORY_REPO_DIR}/.." && pwd)/nodetool-dev-env}"
+case "${FACTORY_DEV_ENV_DIR}/" in
+  "${FACTORY_REPO_DIR}/"*)
+    # Runtime data (database, keys, caches) must never land in the work tree.
+    echo "ERROR: FACTORY_DEV_ENV_DIR (${FACTORY_DEV_ENV_DIR}) is inside the repository." >&2
+    return 1 2>/dev/null || exit 1
+    ;;
+esac
 export FACTORY_API_PORT="${FACTORY_API_PORT:-7778}"
 # web/package.json pins Vite to 3000 with --strictPort.
 export FACTORY_WEB_PORT="${FACTORY_WEB_PORT:-3000}"
