@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { BrowserPage } from "@nodetool-ai/browser";
-import { MediaCapture, OrcaPolicyError } from "../src/index.js";
+import { MediaCapture, OrcaPolicy, OrcaPolicyError, retryAfterSeconds } from "../src/index.js";
 
 /** Runs page functions in this process, with `window` and `fetch` stubbed. */
 function fakePage(url = "https://gen.test/result"): BrowserPage & { evals: number; window: Record<string, unknown> } {
@@ -74,6 +74,28 @@ describe("MediaCapture", () => {
   it("reports an HTTP failure from the page", async () => {
     serve(new Uint8Array(), {}, 403);
     await expect(new MediaCapture({ maxBytes: 1_000, chunkBytes: 512 }).capture(fakePage(), { url: "/x.mp4" })).rejects.toThrow(/HTTP 403/);
+  });
+
+  it("stops on HTTP 429, honours Retry-After, and fetches nothing while blocked", async () => {
+    serve(new Uint8Array(), { "retry-after": "120" }, 429);
+    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>;
+    const policy = new OrcaPolicy({ worktree: "path:/f", allowedOrigins: [], minActionIntervalMs: 0, maxNavigationsPerMinute: 10 });
+    const media = new MediaCapture({ maxBytes: 1_000, chunkBytes: 512, rateLimit: policy });
+    const before = Date.now();
+    const err = await media.capture(fakePage(), { url: "/v.mp4" }).catch((e: unknown) => e);
+    expect(err).toMatchObject({ code: "rate_limited", origin: "https://gen.test" });
+    expect((err as { retryAt: number }).retryAt).toBeGreaterThanOrEqual(before + 119_000);
+    await expect(media.capture(fakePage(), { url: "/other.mp4" })).rejects.toMatchObject({ code: "rate_limited" });
+    expect(fetchMock).toHaveBeenCalledTimes(1);
+  });
+
+  it("parses Retry-After as seconds or an HTTP date", () => {
+    const now = Date.parse("2026-01-01T00:00:00Z");
+    expect(retryAfterSeconds("30", now)).toBe(30);
+    expect(retryAfterSeconds("Thu, 01 Jan 2026 00:01:00 GMT", now)).toBe(60);
+    expect(retryAfterSeconds("Wed, 31 Dec 2025 23:00:00 GMT", now)).toBe(0);
+    expect(retryAfterSeconds("soon", now)).toBeNull();
+    expect(retryAfterSeconds(null, now)).toBeNull();
   });
 
   it("shares one fetch between identical captures in flight", async () => {

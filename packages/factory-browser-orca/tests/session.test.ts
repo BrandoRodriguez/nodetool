@@ -2,7 +2,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import vm from "node:vm";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, onTestFinished, vi } from "vitest";
 import {
   buildEvalExpression,
   decodeEvalResult,
@@ -154,16 +154,62 @@ describe("OrcaPage actions", () => {
     await expect(page.click("#sign-in")).rejects.toBeInstanceOf(OrcaHumanActionRequiredError);
   });
 
-  it("uploads only files from the factory environment", async () => {
-    const { orca, page, root } = await open();
-    const inside = path.join(root, "clip.mp4");
+  it("uploads only from the work and temp directories, never the rest of the environment", async () => {
+    // As in the factory environment: TMPDIR is one folder of it, the secrets another.
+    const envRoot = workRoot();
+    const tmp = path.join(envRoot, "tmp");
+    fs.mkdirSync(tmp);
+    const spy = vi.spyOn(os, "tmpdir").mockReturnValue(tmp);
+    onTestFinished(() => spy.mockRestore());
+    const orca = new FakeOrca();
+    const { page } = await openOrcaSession({ env: fakeEnv(envRoot), runner: orca.runner });
+    const root = envRoot;
+    const workDir = path.join(root, "factory-browser-orca");
+    const inside = path.join(workDir, "clip.mp4");
     fs.writeFileSync(inside, "x");
     await page.setFileInputFiles("#file", [inside]);
     expect(flag(orca.of("upload")[0]!.args, "--files")).toBe(inside);
-    await expect(page.setFileInputFiles("#file", [path.join(os.homedir(), ".ssh", "id_rsa")])).rejects.toThrow(/factory environment/);
-    const comma = path.join(root, "a,b.mp4");
+
+    // The environment's secrets sit next to the work directory, not inside it.
+    fs.mkdirSync(path.join(root, "secrets"));
+    const secret = path.join(root, "secrets", "master.key");
+    fs.writeFileSync(secret, "key");
+    await expect(page.setFileInputFiles("#file", [secret])).rejects.toThrow(/temp or work directory/);
+    // A link inside the work directory cannot reach it either.
+    const link = path.join(workDir, "innocent.mp4");
+    fs.symlinkSync(secret, link);
+    await expect(page.setFileInputFiles("#file", [link])).rejects.toThrow(/temp or work directory/);
+    await expect(page.setFileInputFiles("#file", [path.join(os.homedir(), ".ssh", "id_rsa")])).rejects.toThrow(/temp or work directory/);
+
+    const comma = path.join(workDir, "a,b.mp4");
     fs.writeFileSync(comma, "x");
     await expect(page.setFileInputFiles("#file", [comma])).rejects.toThrow(/comma/);
+    expect(orca.of("upload")).toHaveLength(1);
+  });
+
+  it("refuses caller script text unless page scripts are allowed", async () => {
+    const { orca, page } = await open();
+    await expect(page.evaluate("localStorage.getItem('token')")).rejects.toThrow(/FACTORY_ORCA_ALLOW_PAGE_SCRIPTS/);
+    expect(orca.calls.filter((c) => c.command === "eval" && flag(c.args, "--expression")?.includes("localStorage"))).toHaveLength(0);
+    // NodeTool's own page functions still run.
+    orca.on("eval", () => ({ result: JSON.stringify({ v: 3 }) }));
+    await expect(page.evaluate((a: number) => a + 1, 2)).resolves.toBe(3);
+
+    const allowed = await open({ FACTORY_ORCA_ALLOW_PAGE_SCRIPTS: "1" });
+    allowed.orca.on("eval", () => ({ result: JSON.stringify({ v: "ok" }) }));
+    await expect(allowed.page.evaluate("document.title")).resolves.toBe("ok");
+  });
+
+  it("stops on HTTP 429 and keeps the origin blocked", async () => {
+    const { orca, page } = await open({ FACTORY_ORCA_RATE_LIMIT_COOLDOWN_MS: "60000" });
+    orca.on("goto", (args) => ({ url: flag(args, "--url"), title: "Too many requests" }));
+    orca.on("eval", () => ({ result: JSON.stringify({ v: 429 }) }));
+    await expect(page.goto("https://provider.test/create")).rejects.toMatchObject({ code: "rate_limited", origin: "https://provider.test" });
+    const gotos = orca.of("goto").length;
+    await expect(page.goto("https://provider.test/again")).rejects.toMatchObject({ code: "rate_limited" });
+    await expect(page.click("#generate")).rejects.toMatchObject({ code: "rate_limited" });
+    expect(orca.of("goto")).toHaveLength(gotos);
+    expect(orca.of("click")).toHaveLength(0);
   });
 
   it("reports a tab the user closed", async () => {
@@ -171,7 +217,7 @@ describe("OrcaPage actions", () => {
     orca.on("eval", () => {
       throw { code: "browser_tab_not_found", message: "gone" };
     });
-    await expect(page.evaluate("1")).rejects.toBeInstanceOf(OrcaTabGoneError);
+    await expect(page.evaluate(() => 1)).rejects.toBeInstanceOf(OrcaTabGoneError);
   });
 
   it("clicks by coordinates with move, down and up", async () => {

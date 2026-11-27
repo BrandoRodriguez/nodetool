@@ -16,9 +16,16 @@ import { randomUUID } from "node:crypto";
 import type { BrowserCaptureMediaInput, BrowserCaptureMediaRaw, BrowserPage } from "@nodetool-ai/browser";
 import { OrcaPolicyError } from "./errors.js";
 
+/** HTTP 429 bookkeeping, shared with navigation through the policy. */
+export interface RateLimitGate {
+  assertNotRateLimited(origin: string | null): void;
+  rateLimited(origin: string, retryAfterSeconds?: number | null): Error;
+}
+
 export interface MediaCaptureOptions {
   maxBytes: number;
   chunkBytes: number;
+  rateLimit?: RateLimitGate;
 }
 
 interface StagedMedia {
@@ -26,6 +33,22 @@ interface StagedMedia {
   size: number;
   mime: string;
   error?: string;
+  status?: number;
+  /** The Retry-After header as the server sent it. */
+  retryAfter?: string | null;
+}
+
+/** Retry-After as seconds: delay-seconds or an HTTP-date. Null when absent or unparseable. */
+export function retryAfterSeconds(raw: string | null | undefined, now = Date.now()): number | null {
+  if (!raw) return null;
+  const trimmed = raw.trim();
+  if (/^\d+$/.test(trimmed)) return Number(trimmed);
+  const at = Date.parse(trimmed);
+  return Number.isNaN(at) ? null : Math.max(0, Math.ceil((at - now) / 1000));
+}
+
+function originOf(url: URL): string | null {
+  return url.protocol === "http:" || url.protocol === "https:" ? url.origin : null;
 }
 
 const MEDIA_SCHEMES = new Set(["http:", "https:", "blob:", "data:"]);
@@ -90,6 +113,7 @@ export class MediaCapture {
     if (!MEDIA_SCHEMES.has(absolute.protocol)) {
       throw new OrcaPolicyError(`Media from ${absolute.protocol} URLs is not captured`);
     }
+    this.opts.rateLimit?.assertNotRateLimited(originOf(absolute));
 
     const token = randomUUID();
     let staged: StagedMedia;
@@ -99,7 +123,9 @@ export class MediaCapture {
           const w = window as unknown as Record<string, Map<string, { bytes: Uint8Array; mime: string }>>;
           w[store] ??= new Map();
           const res = await fetch(target, { credentials: "include" });
-          if (!res.ok) return { ok: false, size: 0, mime: "", error: `HTTP ${res.status}` };
+          if (!res.ok) {
+            return { ok: false, size: 0, mime: "", error: `HTTP ${res.status}`, status: res.status, retryAfter: res.headers.get("retry-after") };
+          }
           const declared = Number(res.headers.get("content-length") ?? "0");
           if (declared > max) {
             await res.body?.cancel();
@@ -121,6 +147,10 @@ export class MediaCapture {
       throw err;
     }
     if (!staged.ok) {
+      const origin = originOf(absolute);
+      if (staged.status === 429 && origin && this.opts.rateLimit) {
+        throw this.opts.rateLimit.rateLimited(origin, retryAfterSeconds(staged.retryAfter));
+      }
       if (staged.error === "too_large") {
         throw new OrcaPolicyError(
           `Media is ${staged.size} bytes, above the ${this.opts.maxBytes}-byte limit (FACTORY_ORCA_MAX_MEDIA_BYTES)`

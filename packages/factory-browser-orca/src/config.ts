@@ -42,6 +42,10 @@ export interface OrcaTransportConfig {
   maxNavigationsPerMinute: number;
   /** Milliseconds between console polls. 0 turns polling off. */
   consolePollIntervalMs: number;
+  /** Let caller-written script text run in the tab (browser_console_exec). Off by default. */
+  allowPageScripts: boolean;
+  /** How long an origin stays blocked after HTTP 429 when it names no Retry-After. */
+  rateLimitCooldownMs: number;
   /** The only directory this package writes to. */
   workDir: string;
 }
@@ -125,6 +129,8 @@ export function readOrcaTransportConfig(env: NodeJS.ProcessEnv = process.env): O
     minActionIntervalMs: intFrom(env, "FACTORY_ORCA_MIN_ACTION_INTERVAL_MS", 250, 0, 60_000),
     maxNavigationsPerMinute: intFrom(env, "FACTORY_ORCA_MAX_NAVIGATIONS_PER_MINUTE", 30, 1, 600),
     consolePollIntervalMs: intFrom(env, "FACTORY_ORCA_CONSOLE_POLL_MS", 2_000, 0, 600_000),
+    allowPageScripts: env["FACTORY_ORCA_ALLOW_PAGE_SCRIPTS"] === "1",
+    rateLimitCooldownMs: intFrom(env, "FACTORY_ORCA_RATE_LIMIT_COOLDOWN_MS", 60_000, 1_000, 3_600_000),
     workDir: resolveWorkDir(env)
   };
 }

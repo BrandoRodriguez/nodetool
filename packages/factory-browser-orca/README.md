@@ -61,6 +61,19 @@ de `@nodetool-ai/browser` (`transport-registry.ts`).
 | Tamaño máximo de medios | `FACTORY_ORCA_MAX_MEDIA_BYTES` (64 MB por defecto, techo 256 MB) |
 
 No se pueden capturar URLs de un solo uso, streams MSE ni contenido con DRM.
+
+Ejecución de JavaScript: las funciones fijas de NodeTool (leer la página,
+desplazarse, capturar, subir) se ejecutan siempre, con sus argumentos como
+datos JSON. El texto de script que escribe un agente (`browser_console_exec`)
+se rechaza por defecto, porque la pestaña lleva tu sesión y ese código podría
+leer `localStorage` o cookies no `HttpOnly` y enviarlas fuera.
+
+HTTP 429: si una navegación o una captura recibe 429, el transporte se detiene
+y bloquea ese origen durante su `Retry-After` (las capturas lo pueden leer) o
+`FACTORY_ORCA_RATE_LIMIT_COOLDOWN_MS`. Ningún comando llega a ese origen antes.
+
+Subidas: solo desde `TMPDIR` y el directorio de trabajo del paquete, comparando
+rutas reales; la base de datos, los secretos y el HOME aislado quedan fuera.
 Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción).
 
 ## Configuración
@@ -78,6 +91,8 @@ Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción)
 | `FACTORY_ORCA_COMMAND_TIMEOUT_MS` / `FACTORY_ORCA_NAVIGATION_TIMEOUT_MS` | `30000` / `60000` | Plazos |
 | `FACTORY_ORCA_MAX_MEDIA_BYTES` / `FACTORY_ORCA_MEDIA_CHUNK_BYTES` | 64 MB / 4 MB | Medios |
 | `FACTORY_ORCA_CONSOLE_POLL_MS` | `2000` | `0` desactiva el sondeo de consola |
+| `FACTORY_ORCA_ALLOW_PAGE_SCRIPTS` | `0` | `1` permite que `browser_console_exec` ejecute texto de script en la pestaña con sesión iniciada |
+| `FACTORY_ORCA_RATE_LIMIT_COOLDOWN_MS` | `60000` | Bloqueo de un origen tras HTTP 429 cuando no indica `Retry-After` |
 | `FACTORY_ORCA_CLI` | `ORCA_CLI_COMMAND` o `orca` | Ejecutable de Orca |
 
 ## Pruebas

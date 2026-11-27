@@ -51,6 +51,12 @@ export interface OrcaPageOptions {
   uploadRoots: string[];
   /** Largest evaluation result accepted, in characters. */
   maxEvalChars: number;
+  /**
+   * Whether caller-written script text (browser_console_exec) may run. The
+   * tab carries the user's signed-in session, so it is off by default. The
+   * transport's own page functions run either way.
+   */
+  allowPageScripts: boolean;
 }
 
 /** Builds the expression for `orca eval`. Exported for tests. */
@@ -133,7 +139,7 @@ export class OrcaPage implements BrowserPage {
 
   async title(): Promise<string> {
     if (this.currentTitle === null) {
-      this.currentTitle = await this.evaluate<string>("document.title");
+      this.currentTitle = await this.evaluateTrusted<string>("document.title");
     }
     return this.currentTitle;
   }
@@ -153,13 +159,33 @@ export class OrcaPage implements BrowserPage {
       await this.run(["wait", "--load", opts.waitUntil, "--timeout", String(timeoutMs)], { timeoutMs: timeoutMs + 5_000 });
     }
     // The navigation entry carries the document's HTTP status (Chromium 109+).
-    const status = await this.evaluate<number | null>(
+    const status = await this.evaluateTrusted<number | null>(
       "(performance.getEntriesByType('navigation')[0]?.responseStatus) || null"
     );
+    if (status === 429) {
+      // Stop here: the site asked for less traffic. The page cannot read the
+      // document's Retry-After, so the configured cooldown applies.
+      throw this.cli.policy.rateLimited(originOf(this.currentUrl) ?? originOf(url) ?? url);
+    }
     return { status: typeof status === "number" && status > 0 ? status : null };
   }
 
+  /**
+   * Runs a page function, or script text when page scripts are allowed.
+   * Functions are the transport's and NodeTool's own code; only their
+   * arguments come from the caller, and those cross as JSON data.
+   */
   async evaluate<T = unknown>(fnOrExpr: string | BrowserPageFunction, ...args: unknown[]): Promise<T> {
+    if (typeof fnOrExpr === "string" && !this.opts.allowPageScripts) {
+      throw new OrcaPolicyError(
+        "Running script text in a signed-in Orca tab is off. Set FACTORY_ORCA_ALLOW_PAGE_SCRIPTS=1 to allow it."
+      );
+    }
+    return this.evaluateTrusted<T>(fnOrExpr, ...args);
+  }
+
+  /** The transport's own reads, which the page-script setting does not gate. */
+  private async evaluateTrusted<T = unknown>(fnOrExpr: string | BrowserPageFunction, ...args: unknown[]): Promise<T> {
     const expression = buildEvalExpression(fnOrExpr, args);
     const result = await this.run<{ result: unknown }>(["eval", "--expression", expression]);
     if (typeof result.result === "string" && result.result.length > this.opts.maxEvalChars) {
@@ -193,10 +219,13 @@ export class OrcaPage implements BrowserPage {
       if (file.includes(",")) {
         throw new OrcaPolicyError(`Upload paths cannot contain a comma: ${path.basename(file)}`);
       }
-      if (!this.opts.uploadRoots.some((root) => isInside(root, file))) {
-        throw new OrcaPolicyError(`Uploads must come from the factory environment, not ${file}`);
+      // Compare real paths, so a link inside an allowed root cannot point out of it.
+      const real = await fs.realpath(file).catch(() => null);
+      const roots = await Promise.all(this.opts.uploadRoots.map((root) => fs.realpath(root).catch(() => null)));
+      if (!real || !roots.some((root) => root !== null && isInside(root, real))) {
+        throw new OrcaPolicyError(`Uploads must come from the factory temp or work directory, not ${file}`);
       }
-      const stat = await fs.stat(file);
+      const stat = await fs.stat(real);
       if (!stat.isFile()) throw new OrcaPolicyError(`Not a file: ${file}`);
     }
     await this.act(["upload", "--element", selector, "--files", files.join(",")]);
@@ -238,7 +267,7 @@ export class OrcaPage implements BrowserPage {
   // ── Extras beyond BrowserPage ────────────────────────────────────────
 
   async content(): Promise<string> {
-    return this.evaluate<string>("document.documentElement.outerHTML");
+    return this.evaluateTrusted<string>("document.documentElement.outerHTML");
   }
 
   async reload(): Promise<void> {
@@ -307,7 +336,7 @@ export class OrcaPage implements BrowserPage {
     this.currentUrl = tab.url;
     this.currentTitle = tab.title;
     try {
-      const size = await this.evaluate<{ width: number; height: number }>(
+      const size = await this.evaluateTrusted<{ width: number; height: number }>(
         "({ width: window.innerWidth, height: window.innerHeight })"
       );
       if (size.width > 0 && size.height > 0) this.viewport = size;

@@ -13,7 +13,7 @@
  */
 
 import path from "node:path";
-import { OrcaPolicyError } from "./errors.js";
+import { OrcaPolicyError, OrcaRateLimitedError } from "./errors.js";
 
 /** Commands that act on one tab. */
 const PAGE_COMMANDS = new Set([
@@ -76,6 +76,8 @@ export interface OrcaPolicyOptions {
   allowedOrigins: string[];
   minActionIntervalMs: number;
   maxNavigationsPerMinute: number;
+  /** How long an origin stays blocked after HTTP 429 when it names no Retry-After. */
+  rateLimitCooldownMs?: number;
   now?: () => number;
 }
 
@@ -96,9 +98,35 @@ export class OrcaPolicy {
   private readonly opts: OrcaPolicyOptions;
   private readonly lastActionAt = new Map<string, number>();
   private readonly navigations = new Map<string, number[]>();
+  private readonly blockedUntil = new Map<string, number>();
 
   constructor(opts: OrcaPolicyOptions) {
     this.opts = opts;
+  }
+
+  /**
+   * Records an HTTP 429 from `origin` and returns the error to throw. The
+   * origin stays blocked for `retryAfterSeconds` when the site named it,
+   * otherwise for the configured cooldown.
+   */
+  rateLimited(origin: string, retryAfterSeconds?: number | null): OrcaRateLimitedError {
+    const now = (this.opts.now ?? Date.now)();
+    const waitMs =
+      typeof retryAfterSeconds === "number" && Number.isFinite(retryAfterSeconds) && retryAfterSeconds > 0
+        ? retryAfterSeconds * 1000
+        : (this.opts.rateLimitCooldownMs ?? 60_000);
+    const until = Math.max(this.blockedUntil.get(origin) ?? 0, now + waitMs);
+    this.blockedUntil.set(origin, until);
+    return new OrcaRateLimitedError(origin, until);
+  }
+
+  /** Throws while `origin` is cooling down after HTTP 429. */
+  assertNotRateLimited(origin: string | null): void {
+    if (!origin) return;
+    const until = this.blockedUntil.get(origin);
+    if (until !== undefined && until > (this.opts.now ?? Date.now)()) {
+      throw new OrcaRateLimitedError(origin, until);
+    }
   }
 
   isMutating(args: readonly string[]): boolean {
@@ -176,6 +204,7 @@ export class OrcaPolicy {
   async pace(origin: string | null, navigation: boolean): Promise<void> {
     const now = this.opts.now ?? Date.now;
     const key = origin ?? "(none)";
+    this.assertNotRateLimited(origin);
     if (navigation) {
       const windowStart = now() - 60_000;
       const recent = (this.navigations.get(key) ?? []).filter((t) => t > windowStart);

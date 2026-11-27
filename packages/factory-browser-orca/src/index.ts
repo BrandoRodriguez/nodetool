@@ -10,7 +10,7 @@ export { OrcaCli, spawnRunner, type OrcaRunner, type RunnerOptions, type RunnerR
 export { OrcaPage, buildEvalExpression, decodeEvalResult } from "./orca-page.js";
 export { OrcaPolicy, commandName, isInside } from "./policy.js";
 export { TabScope, type OrcaProfile, type OrcaTabInfo } from "./tab-scope.js";
-export { MediaCapture } from "./media.js";
+export { MediaCapture, retryAfterSeconds, type RateLimitGate } from "./media.js";
 export {
   readOrcaTransportConfig,
   resolveOrcaExecutable,

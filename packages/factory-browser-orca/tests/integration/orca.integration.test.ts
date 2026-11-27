@@ -71,8 +71,13 @@ suite("NodeTool browser actions on the orca transport", () => {
     const view = await browserView({ include_screenshot: true });
     expect(view.elements.some((e) => e.tag === "a" && e.attributes["href"] === "/form")).toBe(true);
     expect(Buffer.from(view.screenshot_png_b64 ?? "", "base64").subarray(1, 4).toString()).toBe("PNG");
-    const result = await browserConsoleExec({ javascript: "({ title: document.title, n: 2 + 2 })" });
-    expect(JSON.parse(result.result_json)).toEqual({ title: "Factory Home", n: 4 });
+  });
+
+  it("refuses caller script text in the signed-in tab by default", async () => {
+    await expect(browserConsoleExec({ javascript: "document.cookie" })).rejects.toMatchObject({
+      name: "OrcaPolicyError",
+      message: expect.stringContaining("FACTORY_ORCA_ALLOW_PAGE_SCRIPTS")
+    });
   });
 
   it("fills a form, uploads a file and submits it", async () => {
@@ -107,8 +112,11 @@ suite("NodeTool browser actions on the orca transport", () => {
   it("keeps the signed-in session across a restart (new tab, same profile)", async () => {
     const restarted = await browserRestart({ url: `${site.origin}/account` });
     expect(restarted.transport).toBe("orca");
-    const text = await browserConsoleExec({ javascript: "document.getElementById('state').textContent" });
-    expect(JSON.parse(text.result_json)).toBe("signed-in:factory-it");
+    // The signed-in page shows the private image only to a session.
+    const view = await browserView({ include_screenshot: false });
+    expect(view.title).toBe("Factory Account");
+    const raw = await browserCaptureMedia({ url: `${site.origin}/media/private.png`, media_type: "image" });
+    expect(Buffer.from(raw.media_b64, "base64").equals(site.image)).toBe(true);
     // Sign out so the profile keeps no test session.
     await browserNavigate({ url: `${site.origin}/logout` });
   });

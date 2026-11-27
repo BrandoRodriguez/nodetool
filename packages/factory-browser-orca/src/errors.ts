@@ -61,6 +61,22 @@ export class OrcaHumanActionRequiredError extends OrcaError {
   }
 }
 
+/**
+ * The site answered HTTP 429. The origin is blocked until `retryAt`; nothing
+ * is sent to it before then, and the caller should not retry earlier.
+ */
+export class OrcaRateLimitedError extends OrcaError {
+  readonly origin: string;
+  readonly retryAt: number;
+
+  constructor(origin: string, retryAt: number) {
+    const seconds = Math.max(0, Math.ceil((retryAt - Date.now()) / 1000));
+    super("rate_limited", `${origin} answered HTTP 429. The transport waits ${seconds} s before contacting it again.`);
+    this.origin = origin;
+    this.retryAt = retryAt;
+  }
+}
+
 /** Orca answered with something that is not the documented JSON envelope. */
 export class OrcaProtocolError extends OrcaError {
   constructor(message: string) {

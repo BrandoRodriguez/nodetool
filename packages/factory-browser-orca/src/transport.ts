@@ -4,7 +4,6 @@
  */
 
 import os from "node:os";
-import path from "node:path";
 import type {
   BrowserTransportCapabilities,
   BrowserTransportFactory,
@@ -37,6 +36,8 @@ export function orcaCapabilities(config: Pick<OrcaTransportConfig, "maxMediaByte
       "A link that downloads a file is saved by Orca in the user's Downloads folder; use capture_media instead.",
       "Each command is one CLI call (about 120 ms for a read, 300 ms for an action).",
       "Passkeys, security keys, captchas and other sign-in steps are left to the user in the Orca tab.",
+      "Script text from the caller (browser_console_exec) is refused unless FACTORY_ORCA_ALLOW_PAGE_SCRIPTS=1.",
+      "After HTTP 429 the site's origin is blocked for its Retry-After, or the configured cooldown.",
       "Only tabs opened by the factory or listed in FACTORY_ORCA_AUTHORIZED_PAGES are driven."
     ]
   };
@@ -53,7 +54,8 @@ export function createOrcaCli(config: OrcaTransportConfig, runner?: OrcaRunner, 
     worktree: config.worktree,
     allowedOrigins: config.allowedOrigins,
     minActionIntervalMs: config.minActionIntervalMs,
-    maxNavigationsPerMinute: config.maxNavigationsPerMinute
+    maxNavigationsPerMinute: config.maxNavigationsPerMinute,
+    rateLimitCooldownMs: config.rateLimitCooldownMs
   });
   return new OrcaCli({
     executable: config.executable,
@@ -90,11 +92,17 @@ export async function openOrcaSession(opts: OpenOrcaSessionOptions = {}): Promis
   const page = await OrcaPage.attach(cli, scope, pageId, {
     navigationTimeoutMs: config.navigationTimeoutMs,
     consolePollIntervalMs: config.consolePollIntervalMs,
-    // The core upload path writes its temp files under os.tmpdir().
-    uploadRoots: [os.tmpdir(), path.dirname(config.workDir)],
-    maxEvalChars: config.maxOutputBytes
+    // The core upload path writes its temp files under os.tmpdir(). Nothing
+    // else of the environment (database, secrets, home) is an upload source.
+    uploadRoots: [os.tmpdir(), config.workDir],
+    maxEvalChars: config.maxOutputBytes,
+    allowPageScripts: config.allowPageScripts
   });
-  const media = new MediaCapture({ maxBytes: config.maxMediaBytes, chunkBytes: config.mediaChunkBytes });
+  const media = new MediaCapture({
+    maxBytes: config.maxMediaBytes,
+    chunkBytes: config.mediaChunkBytes,
+    rateLimit: cli.policy
+  });
 
   return {
     page,
