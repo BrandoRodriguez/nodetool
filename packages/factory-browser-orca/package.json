@@ -1,0 +1,41 @@
+{
+  "name": "@nodetool-ai/factory-browser-orca",
+  "version": "0.8.18",
+  "description": "AI Content Factory: a NodeTool browser transport that drives tabs of the Orca built-in browser through the public orca CLI",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "node ../../scripts/build-typescript-workspace.mjs",
+    "test": "node ../../scripts/run-vitest.mjs run",
+    "test:integration": "node ../../scripts/run-vitest.mjs run --config vitest.integration.config.ts",
+    "lint": "node ../../scripts/run-tsc.mjs --noEmit",
+    "login": "node ./dist/login.js"
+  },
+  "dependencies": {
+    "@nodetool-ai/browser": "*",
+    "@nodetool-ai/config": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^22.0.0",
+    "typescript": "npm:@typescript/typescript6@6.0.2",
+    "vitest": "^5.0.1"
+  },
+  "exports": {
+    ".": {
+      "nodetool-dev": "./src/index.ts",
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js",
+      "default": "./dist/index.js"
+    }
+  },
+  "license": "AGPL-3.0-only",
+  "files": [
+    "dist",
+    "README.md"
+  ]
+}

@@ -83,15 +83,22 @@ export const BrowserRestartInput = z.object({
 });
 export type BrowserRestartInput = z.infer<typeof BrowserRestartInput>;
 
+/**
+ * The transport a session runs on: a built-in id or one from the transport
+ * registry. Inputs keep the {@link BrowserTransport} enum.
+ */
+export const BrowserTransportId = z.string();
+export type BrowserTransportId = z.infer<typeof BrowserTransportId>;
+
 export const BrowserRestartOutput = z.object({
   url: z.string(),
-  transport: BrowserTransport
+  transport: BrowserTransportId
 });
 export type BrowserRestartOutput = z.infer<typeof BrowserRestartOutput>;
 
 /** What `browser_status` answers without opening a session. */
 export const BrowserStatusOutput = z.object({
-  transport: BrowserTransport,
+  transport: BrowserTransportId,
   /** Whether a page session is already open in this process. */
   session_open: z.boolean(),
   /**

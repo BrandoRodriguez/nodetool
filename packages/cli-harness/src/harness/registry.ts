@@ -2008,6 +2008,10 @@ export const SURFACES: SurfaceEntry[] = [
     paths: [
       "chrome-extension/",
       "packages/browser/",
+      // AI Content Factory: the orca transport registered through
+      // packages/browser's transport registry. Its own suite runs with
+      // `npm run test --workspace=packages/factory-browser-orca`.
+      "packages/factory-browser-orca/",
       "packages/agents/src/capabilities/browser.ts",
       "packages/agents/src/capabilities/browser.specs.ts"
     ]

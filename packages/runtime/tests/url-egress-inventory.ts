@@ -998,6 +998,20 @@ export const URL_EGRESS_INVENTORY: EgressEntry[] = [
     guardedBy: [],
     note: "Runs inside `page.evaluate`, so the request comes from the driven browser, not from Node."
   },
+  {
+    file: "packages/factory-browser-orca/src/media.ts",
+    owner: "Orca transport in-page capture",
+    inputSource: "workflow",
+    schemes: ["http", "https"],
+    authScope: "the driven Orca tab's credentials",
+    redirects: "runtime-follows",
+    dnsRebinding: "n/a",
+    policy: "browser",
+    guardedBy: [],
+    note:
+      "Runs inside the Orca tab through `orca eval`, so the request comes from that tab, not from Node. " +
+      "Only http(s), blob: and data: sources pass, and the body is capped at FACTORY_ORCA_MAX_MEDIA_BYTES."
+  },
 
   // ------------------------------------------------------------ infrastructure
   {

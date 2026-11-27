@@ -1,0 +1,93 @@
+# @nodetool-ai/factory-browser-orca
+
+Transporte de navegador de NodeTool para AI Content Factory. Maneja pestañas
+del navegador integrado de Orca a través del CLI público `orca`, en el perfil
+aislado "AI Content Factory". No usa endpoints privados de Orca, el perfil
+`default` ni las cookies del usuario.
+
+## Activación
+
+```bash
+source electron/scripts/factory/dev-env.sh
+NODETOOL_BROWSER_TRANSPORT=orca electron/scripts/factory/dev-desktop.sh web
+```
+
+`dev-env.sh` ya define `NODETOOL_BROWSER_TRANSPORT_MODULES=orca=@nodetool-ai/factory-browser-orca`
+y `FACTORY_ORCA_WORKTREE` (el espacio "AI Content Factory" de Orca). Sin
+`NODETOOL_BROWSER_TRANSPORT=orca`, NodeTool usa el transporte `local`.
+
+Requisitos: Orca abierto y el perfil creado una vez:
+
+```bash
+orca tab profile create --label "AI Content Factory"
+```
+
+## Iniciar sesión en un proveedor
+
+```bash
+npm run login --workspace=packages/factory-browser-orca -- https://proveedor.example/login
+```
+
+Abre la página en una pestaña del perfil de la fábrica, delante, para que
+inicies sesión a mano. La sesión queda guardada en ese perfil. El transporte
+nunca escribe credenciales ni lee cookies. Los passkeys, llaves de seguridad,
+captchas y pasos de verificación se dejan siempre al usuario: el transporte se
+detiene con `human_action_required`.
+
+## Arquitectura
+
+| Archivo | Responsabilidad |
+|---|---|
+| `src/orca-cli.ts` | Única llamada al CLI: `spawn` sin shell, `--json`, plazo y `AbortSignal`, límite de salida, valores secretos por stdin, cola por pestaña, concurrencia global, lecturas idénticas compartidas, reintento solo de lecturas |
+| `src/policy.ts` | Lista blanca de comandos, `--page` y `--worktree` obligatorios, solo http(s) y `about:blank`, lista opcional de orígenes, ritmo y presupuesto de navegación por origen |
+| `src/tab-scope.ts` | Perfil aislado (nunca `default`), pestañas abiertas por la fábrica o autorizadas, verificación de espacio y perfil antes de usar una pestaña |
+| `src/orca-page.ts` | `BrowserPage` sobre una pestaña: evaluación con argumentos como literal JSON y resultado envuelto, efectos de cada acción, consola por sondeo |
+| `src/media.ts` | Captura de medios con `fetch` dentro de la página, tamaño máximo, transferencia por trozos, liberación en `finally` |
+| `src/config.ts` | Variables `FACTORY_ORCA_*`, límites y directorio de trabajo dentro del entorno aislado |
+| `src/transport.ts` | Fábrica `browserTransport` y capacidades declaradas |
+
+El núcleo solo aporta la interfaz `BrowserPage` y el registro de transportes
+de `@nodetool-ai/browser` (`transport-registry.ts`).
+
+## Capacidades y limitaciones
+
+| Capacidad | Orca |
+|---|---|
+| CDP directo, eventos `Network`, cuerpos de respuesta | No |
+| Consola | Sondeo tras las acciones, no eventos |
+| Entrada por coordenadas | Sí (`mouse move/down/up`) |
+| Ruta de descarga | No: una descarga de página va a `~/Downloads`; usa `capture_media` |
+| Sesiones iniciadas a mano | Sí, en el perfil aislado |
+| Tamaño máximo de medios | `FACTORY_ORCA_MAX_MEDIA_BYTES` (64 MB por defecto, techo 256 MB) |
+
+No se pueden capturar URLs de un solo uso, streams MSE ni contenido con DRM.
+Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción).
+
+## Configuración
+
+| Variable | Por defecto | Uso |
+|---|---|---|
+| `FACTORY_ORCA_WORKTREE` | (obligatoria) | Espacio de Orca, p. ej. `path:/…/AI Content Factory` |
+| `FACTORY_ORCA_PROFILE_LABEL` / `FACTORY_ORCA_PROFILE_ID` | `AI Content Factory` | Perfil aislado |
+| `FACTORY_ORCA_AUTHORIZED_PAGES` | vacío | Pestañas existentes autorizadas (browserPageId, separadas por comas) |
+| `FACTORY_ORCA_PAGE_ID` | vacío | Reutilizar una pestaña autorizada en vez de abrir una |
+| `FACTORY_ORCA_KEEP_TABS` | `0` | `1` conserva al cerrar las pestañas abiertas por la fábrica |
+| `FACTORY_ORCA_ALLOWED_ORIGINS` | vacío | Orígenes permitidos (`https://a.com`, `*.b.com`) |
+| `FACTORY_ORCA_MIN_ACTION_INTERVAL_MS` | `250` | Separación mínima entre acciones por origen |
+| `FACTORY_ORCA_MAX_NAVIGATIONS_PER_MINUTE` | `30` | Navegaciones por origen y minuto |
+| `FACTORY_ORCA_COMMAND_TIMEOUT_MS` / `FACTORY_ORCA_NAVIGATION_TIMEOUT_MS` | `30000` / `60000` | Plazos |
+| `FACTORY_ORCA_MAX_MEDIA_BYTES` / `FACTORY_ORCA_MEDIA_CHUNK_BYTES` | 64 MB / 4 MB | Medios |
+| `FACTORY_ORCA_CONSOLE_POLL_MS` | `2000` | `0` desactiva el sondeo de consola |
+| `FACTORY_ORCA_CLI` | `ORCA_CLI_COMMAND` o `orca` | Ejecutable de Orca |
+
+## Pruebas
+
+```bash
+npm run test --workspace=packages/factory-browser-orca           # unitarias, Orca simulado
+FACTORY_ORCA_INTEGRATION=1 npm run test:integration --workspace=packages/factory-browser-orca
+```
+
+La integración necesita Orca abierto, el perfil creado y el entorno exportado
+(`source electron/scripts/factory/dev-env.sh && factory_prepare_dirs && factory_runtime_env`).
+Levanta un sitio local en `127.0.0.1`, no consume generaciones y cierra sus
+pestañas y su sesión de prueba al terminar.

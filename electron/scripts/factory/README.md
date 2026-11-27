@@ -26,6 +26,7 @@ repositorio.
 | Clave maestra de secretos | Llavero de macOS (`nodetool`) | `nodetool-dev-env/secrets/master.key` (generada, 0600) |
 | Node.js | integrado en la app | `nodetool-dev-env/toolchain` (versión de `.nvmrc`) |
 | Caché de npm | no aplica | `nodetool-dev-env/npm-cache` |
+| Temporales y sockets (`TMPDIR`) | temporal del sistema | `nodetool-dev-env/tmp`, mediante el enlace corto `/tmp/nodetool-factory-<uid>` |
 
 Más detalles:
 
@@ -34,8 +35,16 @@ Más detalles:
   tanto, un HOME vacío y no heredan tus sesiones.
 - Las actualizaciones automáticas no se ejecutan: Electron las omite cuando la
   app no está empaquetada.
-- El navegador de agentes usa CDP con un perfil temporal de Chrome
-  (`NODETOOL_BROWSER_TRANSPORT=cdp`), nunca tu Chrome con sesión iniciada.
+- El navegador de agentes usa por defecto el transporte `local`: Chrome
+  headless con un perfil temporal, nunca tu Chrome con sesión iniciada. Con
+  `NODETOOL_BROWSER_TRANSPORT=orca` usa pestañas de Orca en el perfil aislado
+  "AI Content Factory" (ver
+  [factory-browser-orca](../../../packages/factory-browser-orca/README.md)).
+- `TMPDIR` aislado también separa el puente de la extensión: sus sockets viven
+  en `TMPDIR`, así que el backend de desarrollo no encuentra el host nativo
+  que arranca la extensión de Chrome de la app instalada. El enlace va por
+  `/tmp` porque macOS limita la ruta de un socket unix a 104 bytes;
+  `dev-env.sh` comprueba que el enlace es tuyo y apunta al entorno.
 - No se copia ninguna credencial de la app instalada. Las claves de proveedores
   se añaden desde Ajustes de la versión de desarrollo.
 
@@ -127,5 +136,10 @@ npm run nodetool -- node run lib.browser.Screenshot --props '{"url":"https://exa
   de la app instalada en 7777 y ofrecía detenerlo o reutilizarlo.
 - `electron/src/__tests__/desktopPort.test.ts`: pruebas del puerto
   configurable.
+- `packages/browser/src/browser-page.ts` y `transport-registry.ts` (nuevos):
+  interfaz `BrowserPage` y registro de transportes de navegador.
+  `actions.ts`, `capture.ts` y `upload.ts` usan `BrowserPage` en vez de
+  `CdpPage`, y la salida `transport` de `browser_status`/`browser_restart` es
+  un string. Los transportes `local` y `extension` no pasan por el registro.
 
-Si la variable no está definida, el comportamiento es idéntico al oficial.
+Sin las variables nuevas, el comportamiento es idéntico al oficial.

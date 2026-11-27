@@ -35,6 +35,10 @@ export FACTORY_HOME="${FACTORY_DEV_ENV_DIR}/home"
 export FACTORY_ELECTRON_USER_DATA="${FACTORY_DEV_ENV_DIR}/electron-user-data"
 export FACTORY_LOG_DIR="${FACTORY_DEV_ENV_DIR}/logs"
 export FACTORY_RUN_DIR="${FACTORY_DEV_ENV_DIR}/run"
+export FACTORY_TMP_DIR="${FACTORY_DEV_ENV_DIR}/tmp"
+# TMPDIR goes through this short link to FACTORY_TMP_DIR: macOS caps a unix
+# socket path at 104 bytes, and the native bridge and tsx put sockets in TMPDIR.
+export FACTORY_TMP_LINK="/tmp/nodetool-factory-$(id -u)"
 FACTORY_MASTER_KEY_FILE="${FACTORY_DEV_ENV_DIR}/secrets/master.key"
 
 FACTORY_NODE_VERSION="$(tr -d '[:space:]' < "${FACTORY_REPO_DIR}/.nvmrc")"
@@ -64,6 +68,18 @@ factory_prepare_dirs() {
   if [[ ! -s "${FACTORY_MASTER_KEY_FILE}" ]]; then
     (umask 077 && node -e 'process.stdout.write(require("crypto").randomBytes(32).toString("base64"))' \
       > "${FACTORY_MASTER_KEY_FILE}")
+  fi
+  mkdir -p "${FACTORY_TMP_DIR}"
+  chmod 700 "${FACTORY_TMP_DIR}"
+  if [[ ! -e "${FACTORY_TMP_LINK}" && ! -L "${FACTORY_TMP_LINK}" ]]; then
+    ln -s "${FACTORY_TMP_DIR}" "${FACTORY_TMP_LINK}"
+  fi
+  # Trust the link only if it is ours and points at our directory: /tmp is
+  # shared, and another account could have planted it first.
+  if [[ ! -L "${FACTORY_TMP_LINK}" || "$(stat -f %u "${FACTORY_TMP_LINK}")" != "$(id -u)" \
+        || "$(readlink "${FACTORY_TMP_LINK}")" != "${FACTORY_TMP_DIR}" ]]; then
+    echo "ERROR: ${FACTORY_TMP_LINK} is not this environment's temp link. Remove it and retry." >&2
+    return 1
   fi
 }
 
@@ -95,8 +111,17 @@ factory_runtime_env() {
   SECRETS_MASTER_KEY="$(cat "${FACTORY_MASTER_KEY_FILE}")"
   export SECRETS_MASTER_KEY
 
-  # The agent browser drives a fresh Chrome profile over CDP, never the
-  # user's signed-in Chrome through the extension relay.
-  export NODETOOL_BROWSER_TRANSPORT="cdp"
+  # Temp files and sockets stay in the environment. This also keeps the
+  # extension bridge apart: its sockets live in TMPDIR, so a dev backend never
+  # finds the native host the installed app's Chrome extension started.
+  export TMPDIR="${FACTORY_TMP_LINK}/"
+
+  # Browser transport: `local` (headless Chrome, fresh profile) unless the
+  # caller chose another. `orca` drives the Orca built-in browser in the
+  # isolated "AI Content Factory" profile (packages/factory-browser-orca).
+  export NODETOOL_BROWSER_TRANSPORT="${NODETOOL_BROWSER_TRANSPORT:-local}"
+  export NODETOOL_BROWSER_TRANSPORT_MODULES="${NODETOOL_BROWSER_TRANSPORT_MODULES:-orca=@nodetool-ai/factory-browser-orca}"
+  export FACTORY_ORCA_WORKTREE="${FACTORY_ORCA_WORKTREE:-path:$(dirname "${FACTORY_REPO_DIR}")}"
+  export FACTORY_ORCA_PROFILE_LABEL="${FACTORY_ORCA_PROFILE_LABEL:-AI Content Factory}"
   export ELECTRON_ENABLE_LOGGING=1
 }
