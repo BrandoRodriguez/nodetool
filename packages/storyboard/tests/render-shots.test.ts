@@ -504,6 +504,44 @@ describe("renderShots", () => {
     expect(state.document.shots[0].failure_reason).toBe("provider is down");
   });
 
+  it("keeps a provider's manual-step instructions whole on the failed shot", async () => {
+    const instructions =
+      "Manual step needed. NodeTool sent nothing to ChatGPT. Paste the prompt below into ChatGPT and generate one image. " +
+      'Download it, then on this shot use "Upload your own still".\n\nPrompt:\nA lighthouse at dawn';
+    const doc = board([shot({ id: "s1", index: 0 })]);
+    const { host, state } = fakeHost(doc, {
+      runGeneration: async () => {
+        const error = new Error(instructions);
+        error.name = "ManualGenerationRequiredError";
+        throw error;
+      }
+    });
+
+    const outcomes = await renderShots(host, { id: "b1" }, planShotRenders(doc, NO_ENTITIES, "keyframe"));
+
+    expect(outcomes[0].ok).toBe(false);
+    expect(state.document.shots[0].status).toBe("failed");
+    expect(state.document.shots[0].failure_reason).toBe(instructions);
+  });
+
+  it("marks the shot failed with the wait when the provider is rate limited", async () => {
+    const doc = board([shot({ id: "s1", index: 0 }), shot({ id: "s2", index: 1 })]);
+    let calls = 0;
+    const { host, state } = fakeHost(doc, {
+      runGeneration: async () => {
+        calls += 1;
+        throw new Error("chatgpt answered HTTP 429 (too many requests). Wait 120 s before trying again; nothing was resent.");
+      }
+    });
+
+    await renderShots(host, { id: "b1" }, planShotRenders(doc, NO_ENTITIES, "keyframe"));
+
+    expect(state.document.shots.map((s) => s.status)).toEqual(["failed", "failed"]);
+    expect(state.document.shots[0].failure_reason).toContain("Wait 120 s");
+    // Each shot made one call; the provider, not the board, refuses the second.
+    expect(calls).toBe(2);
+  });
+
   it("clears the saved failure reason when a later render succeeds", async () => {
     const doc = board([
       {

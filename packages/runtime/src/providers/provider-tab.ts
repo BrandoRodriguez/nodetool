@@ -1,0 +1,75 @@
+/**
+ * The signed-in tab a browser-driven provider runs in, on whichever browser
+ * transport the user configured.
+ *
+ * `NODETOOL_BROWSER_TRANSPORT` unset, `local` or `extension` keeps the
+ * original path: the tab in the user's Chrome behind the NodeTool extension
+ * ({@link createExtensionTab}). Any other value names a transport from the
+ * `@nodetool-ai/browser` registry, which serves the tab through its
+ * `openProviderTab`. Either way the provider gets an {@link ExtensionTab}, so
+ * its logic is written once.
+ */
+
+import { createExtensionTab, type ExtensionTab } from "./extension-tab.js";
+
+const EXTENSION_TRANSPORTS = new Set(["", "local", "extension"]);
+
+export interface ResolveProviderTabOptions {
+  providerId: string;
+  host: string;
+  /** Whether the provider's own scripts may run in the tab. */
+  automated: boolean;
+  env?: NodeJS.ProcessEnv;
+}
+
+/** The configured transport id, `extension` for the original path. */
+export function configuredProviderTransport(env: NodeJS.ProcessEnv = process.env): string {
+  const value = env["NODETOOL_BROWSER_TRANSPORT"]?.trim() ?? "";
+  return EXTENSION_TRANSPORTS.has(value) ? "extension" : value;
+}
+
+/**
+ * The provider's tab. The transport opens lazily, on the first call, so
+ * listing models or building a provider never touches a browser.
+ */
+export function resolveProviderTab(opts: ResolveProviderTabOptions): ExtensionTab & { focus?(): Promise<void> } {
+  const transport = configuredProviderTransport(opts.env);
+  if (transport === "extension") return createExtensionTab(opts.host);
+
+  type Opened = Awaited<ReturnType<NonNullable<import("@nodetool-ai/browser").BrowserTransportFactory["openProviderTab"]>>>;
+  let opened: Promise<Opened> | null = null;
+  const tab = (): Promise<Opened> =>
+    (opened ??= (async () => {
+      const { loadBrowserTransport } = await import("@nodetool-ai/browser");
+      const factory = await loadBrowserTransport(transport, opts.env ?? process.env);
+      if (!factory.openProviderTab) {
+        throw new Error(
+          `Browser transport "${transport}" cannot open provider tabs. Use the extension transport, or do this step by hand in ${opts.host}.`
+        );
+      }
+      return factory.openProviderTab({ providerId: opts.providerId, host: opts.host, automated: opts.automated });
+    })().catch((error: unknown) => {
+      // A failed open is retried on the next call instead of cached.
+      opened = null;
+      throw error;
+    }));
+
+  return {
+    evaluate: async (expression, timeoutMs, signal) => (await tab()).evaluate(expression, timeoutMs, signal),
+    navigate: async (url, signal) => (await tab()).navigate(url, signal),
+    download: async () => {
+      throw new Error(
+        `Browser transport "${transport}" cannot load files with the browser's cookies. Download the file from ${opts.host} by hand.`
+      );
+    },
+    focus: async () => {
+      const current = await tab();
+      await current.focus?.();
+    },
+    release: async () => {
+      if (!opened) return;
+      const current = await opened.catch(() => null);
+      await current?.release?.();
+    }
+  };
+}

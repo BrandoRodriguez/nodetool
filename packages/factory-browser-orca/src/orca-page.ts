@@ -88,6 +88,40 @@ export function decodeEvalResult<T>(raw: unknown): T {
   return (parsed as { v: T }).v;
 }
 
+/** Shapes of a bearer credential: a JWT, a Bearer header, an API key, a session cookie. */
+const CREDENTIAL_PATTERNS = [
+  /eyJ[A-Za-z0-9_-]{8,}\.eyJ[A-Za-z0-9_-]{8,}\.[A-Za-z0-9_-]{8,}/,
+  /\bBearer\s+[A-Za-z0-9._~+/=-]{16,}/i,
+  /\bsk-[A-Za-z0-9_-]{16,}/,
+  /(?:__Secure-|__Host-)?next-auth\.session-token/i
+];
+
+/**
+ * Throws when a provider script's result carries something shaped like a
+ * credential. Scripts use the session inside the page; none may return it.
+ */
+export function assertNoCredentials(value: unknown, depth = 0): void {
+  if (depth > 8 || value === null || value === undefined) return;
+  if (typeof value === "string") {
+    if (CREDENTIAL_PATTERNS.some((pattern) => pattern.test(value))) {
+      throw new OrcaPolicyError("A provider script returned something shaped like a credential. It was refused.");
+    }
+    return;
+  }
+  if (Array.isArray(value)) {
+    for (const item of value) assertNoCredentials(item, depth + 1);
+    return;
+  }
+  if (typeof value === "object") {
+    for (const [key, item] of Object.entries(value)) {
+      if (/^(access_?token|refresh_?token|authorization|cookie|session_?token|api_?key)$/i.test(key)) {
+        throw new OrcaPolicyError(`A provider script returned a "${key}" field. It was refused.`);
+      }
+      assertNoCredentials(item, depth + 1);
+    }
+  }
+}
+
 function originOf(url: string): string | null {
   try {
     const parsed = new URL(url);
@@ -186,12 +220,35 @@ export class OrcaPage implements BrowserPage {
 
   /** The transport's own reads, which the page-script setting does not gate. */
   private async evaluateTrusted<T = unknown>(fnOrExpr: string | BrowserPageFunction, ...args: unknown[]): Promise<T> {
-    const expression = buildEvalExpression(fnOrExpr, args);
-    const result = await this.run<{ result: unknown }>(["eval", "--expression", expression]);
+    return this.evaluateExpression<T>(buildEvalExpression(fnOrExpr, args));
+  }
+
+  private async evaluateExpression<T>(expression: string, opts: RunOptions = {}): Promise<T> {
+    const result = await this.run<{ result: unknown }>(["eval", "--expression", expression], opts);
     if (typeof result.result === "string" && result.result.length > this.opts.maxEvalChars) {
       throw new OrcaPolicyError(`Evaluation result exceeds ${this.opts.maxEvalChars} characters`);
     }
     return decodeEvalResult<T>(result.result);
+  }
+
+  /**
+   * Runs one of a media provider's own scripts. Only the provider-tab channel
+   * calls this; agent browser actions cannot. The script runs only while the
+   * tab is on `host`, and a result that looks like a credential is refused, so
+   * a script cannot hand a session token to Node.
+   */
+  async evaluateProviderScript(
+    expression: string,
+    host: string,
+    opts: RunOptions = {}
+  ): Promise<unknown> {
+    const guarded =
+      `(async () => { if (location.hostname !== ${JSON.stringify(host)}) ` +
+      `throw new Error("NT_WRONG_HOST: the tab left ${host.replace(/[^a-z0-9.-]/gi, "")}"); ` +
+      `return await (${expression}); })()`;
+    const value = await this.evaluateExpression<unknown>(buildEvalExpression(guarded, []), opts);
+    assertNoCredentials(value);
+    return value;
   }
 
   async click(selector: string): Promise<void> {

@@ -123,5 +123,10 @@ factory_runtime_env() {
   export NODETOOL_BROWSER_TRANSPORT_MODULES="${NODETOOL_BROWSER_TRANSPORT_MODULES:-orca=@nodetool-ai/factory-browser-orca}"
   export FACTORY_ORCA_WORKTREE="${FACTORY_ORCA_WORKTREE:-path:$(dirname "${FACTORY_REPO_DIR}")}"
   export FACTORY_ORCA_PROFILE_LABEL="${FACTORY_ORCA_PROFILE_LABEL:-AI Content Factory}"
+  # Media providers that drive a consumer website honour that site's terms:
+  # where they forbid automated use (ChatGPT), the provider hands the step to
+  # the user instead of sending anything. FACTORY_ORCA_PROVIDER_TABS names the
+  # tab each provider may use (providerId=browserPageId).
+  export NODETOOL_BROWSER_PROVIDER_POLICY="${NODETOOL_BROWSER_PROVIDER_POLICY:-terms}"
   export ELECTRON_ENABLE_LOGGING=1
 }

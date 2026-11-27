@@ -61,7 +61,9 @@ export {
   parseTransportModules,
   type BrowserTransportCapabilities,
   type BrowserTransportSession,
-  type BrowserTransportFactory
+  type BrowserTransportFactory,
+  type ProviderTab,
+  type ProviderTabSpec
 } from "./transport-registry.js";
 
 export { captureMediaInPage } from "./capture.js";
