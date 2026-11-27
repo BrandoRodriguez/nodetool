@@ -53,15 +53,53 @@ npm run build:packages
 ## Uso diario
 
 ```bash
+electron/scripts/factory/dev-desktop.sh web      # backend en 7778 + Vite en 3000, sin Electron
 electron/scripts/factory/dev-desktop.sh start    # Vite + Electron; Electron arranca el backend en 7778
 electron/scripts/factory/dev-desktop.sh status
 electron/scripts/factory/dev-desktop.sh stop
 electron/scripts/factory/dev-desktop.sh server   # solo backend en 7778, sin ventana
 ```
 
-`start` se niega a arrancar si el puerto 7778 o el 3000 están ocupados, y
-`stop` detiene únicamente los procesos que arrancó, según sus PID en
-`nodetool-dev-env/run/`. Ninguno de los dos actúa sobre la app instalada.
+`start` y `web` se niegan a arrancar si el puerto 7778 o el 3000 están
+ocupados, y `stop` detiene únicamente los procesos que arrancó, según sus PID
+en `nodetool-dev-env/run/`. Ninguno actúa sobre la app instalada.
+
+Vite escucha solo en `127.0.0.1`. El script oficial de `web/package.json` usa
+`0.0.0.0`, que expondría la interfaz y su proxy en la red local.
+
+## Modo navegador (`web`)
+
+Abre `http://localhost:3000` en cualquier navegador, por ejemplo el de Orca.
+La página usa URLs relativas (`/api`, `/trpc`, `/ws`, `/storage`) y Vite las
+reenvía a `PROXY_API_TARGET`, es decir, al backend aislado en 7778. El backend
+reconoce `localhost:3000` como cliente local, así que no hace falta iniciar
+sesión.
+
+`scripts/dev-server.mjs` arranca el backend con `tsx watch`, que lo reinicia al
+cambiar código de `packages/*/src`. Vite recarga en caliente los cambios de
+`web/src`.
+
+### Qué funciona en el navegador y qué requiere Electron
+
+| Área | Navegador | Notas |
+|---|---|---|
+| Editor de workflows, ejecución, chat, agentes, assets, timeline, storyboard, sketch, 3D, mini apps, modelos de proveedores | Sí | Todo va por HTTP, tRPC y WebSocket al backend |
+| Navegador de agentes (`lib.browser.Screenshot`, herramientas de navegación) | Sí | Lo ejecuta el backend con Chrome por CDP |
+| Portapapeles | Sí, con límites | Usa `navigator.clipboard`. Copiar imágenes y leer HTML dependen de los permisos del navegador |
+| Selección de archivos en listas de imagen, audio, vídeo y texto | Sí | Selector del navegador en lugar del diálogo nativo. El archivo se sube al backend |
+| Referenciar un archivo local en su ruta original | No | `window.api.files`. En el navegador el archivo se sube como asset |
+| Elegir carpeta de proyecto | Sí | Sin diálogo nativo: usa `FileBrowserDialog`, que lista carpetas a través del backend |
+| Instalar runtimes (Python/conda, paquetes) y node packs | No | `window.api.packages`. La interfaz muestra un aviso de solo escritorio |
+| Vaults (varias bases de datos) | No | `window.api.vaults` |
+| Instrumentos VST en el timeline | No | Proceso nativo `vst-host` |
+| Cuenta en la nube, publicar y sincronizar | No | `window.api.cloudAccount` y `window.api.cloud` |
+| Mostrar en Finder, abrir carpetas de modelos, abrir el log | No | `window.api.shell` y `showItemInFolder` |
+| Menú nativo, bandeja, atajos globales, notificaciones del sistema, reinicio del backend | No | Proceso principal de Electron |
+| Ajustes de escritorio (canal de actualización, configuración MCP de clientes) | No | `window.api.settings` y `window.api.mcp` |
+
+La vista previa de archivos locales del backend queda limitada al HOME aislado,
+que es la raíz por defecto de `NODETOOL_LOCAL_FILE_ROOTS`, así que no expone
+tus archivos reales.
 
 Para ejecutar otros comandos del repositorio (pruebas, CLI) con el mismo
 aislamiento:

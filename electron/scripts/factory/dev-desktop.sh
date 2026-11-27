@@ -2,6 +2,7 @@
 # AI Content Factory: start, stop and inspect the isolated NodeTool dev build.
 #
 #   electron/scripts/factory/dev-desktop.sh start    # Vite + Electron (Electron starts the backend)
+#   electron/scripts/factory/dev-desktop.sh web      # backend + Vite for a browser, no Electron
 #   electron/scripts/factory/dev-desktop.sh server   # backend only, no window
 #   electron/scripts/factory/dev-desktop.sh stop
 #   electron/scripts/factory/dev-desktop.sh status
@@ -83,6 +84,21 @@ preflight() {
   node scripts/build-stale-websocket-workspaces.mjs --electron
 }
 
+# Vite on loopback only. web/package.json binds 0.0.0.0, which would expose the
+# dev UI, and through its proxy the backend, to the local network.
+start_vite() {
+  echo "Starting Vite on ${NT_WEB_DEV_SERVER_URL} (proxy -> ${PROXY_API_TARGET})..."
+  start_detached web "${FACTORY_REPO_DIR}/node_modules/.bin/vite" web \
+    --host 127.0.0.1 --port "${FACTORY_WEB_PORT}" --strictPort --clearScreen false
+  wait_for_url "${NT_WEB_DEV_SERVER_URL}" "Vite"
+}
+
+start_backend() {
+  echo "Starting backend on ${PROXY_API_TARGET}..."
+  start_detached server node scripts/dev-server.mjs
+  wait_for_url "http://127.0.0.1:${FACTORY_API_PORT}/health" "backend"
+}
+
 cmd_start() {
   preflight
   require_free_port "${FACTORY_WEB_PORT}" "Vite"
@@ -95,9 +111,7 @@ cmd_start() {
     npm --prefix electron run vite:build >> "${FACTORY_LOG_DIR}/electron-build.log" 2>&1
   fi
 
-  echo "Starting Vite on ${NT_WEB_DEV_SERVER_URL} (proxy -> ${PROXY_API_TARGET})..."
-  start_detached web npm --prefix web run dev
-  wait_for_url "${NT_WEB_DEV_SERVER_URL}" "Vite"
+  start_vite
 
   echo "Starting Electron (user data: ${FACTORY_ELECTRON_USER_DATA})..."
   NT_ELECTRON_DEV_MODE=1 NODETOOL_NODE="$(command -v node)" \
@@ -109,10 +123,17 @@ cmd_start() {
 
 cmd_server() {
   preflight
-  echo "Starting backend on ${PROXY_API_TARGET}..."
-  start_detached server node scripts/dev-server.mjs
-  wait_for_url "http://127.0.0.1:${FACTORY_API_PORT}/health" "backend"
+  start_backend
   cmd_status
+}
+
+cmd_web() {
+  preflight
+  require_free_port "${FACTORY_WEB_PORT}" "Vite"
+  start_backend
+  start_vite
+  cmd_status
+  echo "Open ${NT_WEB_DEV_SERVER_URL} in the browser."
 }
 
 cmd_stop() {
@@ -154,11 +175,12 @@ cmd_status() {
 
 case "${1:-}" in
   start) cmd_start ;;
+  web) cmd_web ;;
   server) cmd_server ;;
   stop) cmd_stop ;;
   status) cmd_status ;;
   *)
-    echo "Usage: $0 {start|server|stop|status}" >&2
+    echo "Usage: $0 {start|web|server|stop|status}" >&2
     exit 2
     ;;
 esac
