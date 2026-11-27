@@ -31,6 +31,7 @@ function isDevMode(): boolean {
 import { emitBootMessage, emitServerError, emitServerStarted, emitServerLog } from "./events";
 import { serverState } from "./state";
 import type { ServerState } from "./state";
+import { getDesktopBasePort } from "./desktopPort";
 import { getServerUrl, errorMessage, isErrnoException } from "./utils";
 import { execFileSync } from "child_process";
 import fs from "fs/promises";
@@ -315,9 +316,9 @@ async function startServer(): Promise<void> {
     throw new Error(message);
   }
 
-  const basePort = 7777;
+  const basePort = getDesktopBasePort();
   // Dev mode loads the renderer from the Vite dev server, whose /api and /ws
-  // proxy target is pinned to 7777 (web/vite.config.ts, PROXY_API_TARGET). A
+  // proxy target is this port (web/vite.config.ts, PROXY_API_TARGET). A
   // backend on any other port is unreachable from the UI: every API call comes
   // back 502 and the websockets never connect. Fail loudly instead.
   if (isDevMode() && !(await isPortAvailable(basePort))) {
@@ -601,11 +602,12 @@ async function initializeBackendServerNow(): Promise<void> {
     // backend, or an orphan from a session whose PID file was overwritten).
     // If the port is taken anyway, identify the listener so the responsive
     // branch below can offer reuse-or-kill instead of failing on "Port In Use".
-    if (!existingPid && !(await isPortAvailable(7777))) {
-      const portPid = findPidListeningOnPort(7777);
+    const desktopPort = getDesktopBasePort();
+    if (!existingPid && !(await isPortAvailable(desktopPort))) {
+      const portPid = findPidListeningOnPort(desktopPort);
       if (portPid && portPid !== process.pid) {
         logMessage(
-          `Port 7777 is held by PID ${portPid} (not in the PID file); checking whether it is a NodeTool server...`
+          `Port ${desktopPort} is held by PID ${portPid} (not in the PID file); checking whether it is a NodeTool server...`
         );
         existingPid = portPid;
       }
@@ -619,7 +621,7 @@ async function initializeBackendServerNow(): Promise<void> {
       logMessage(`Checking if server PID ${existingPid} is responsive...`);
       
       // Try to connect to the default port to verify it's actually running
-      const defaultPort = 7777;
+      const defaultPort = desktopPort;
       try {
         const controller = new AbortController();
         const timeoutId = setTimeout(() => controller.abort(), 2000);
@@ -696,10 +698,10 @@ async function initializeBackendServerNow(): Promise<void> {
         if (!pidFromPidFile) {
           // The PID came from a port scan, not from our PID file, and it does
           // not answer /health — it may be an unrelated app that happens to
-          // sit on 7777. Never kill a process we cannot identify; fall
-          // through and let the port guard in startServer report it.
+          // sit on the desktop port. Never kill a process we cannot identify;
+          // fall through and let the port guard in startServer report it.
           logMessage(
-            `PID ${existingPid} on port 7777 does not answer /health; not a NodeTool server, leaving it alone`,
+            `PID ${existingPid} on port ${desktopPort} does not answer /health; not a NodeTool server, leaving it alone`,
             "warn"
           );
           existingPid = null;
