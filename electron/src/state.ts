@@ -1,4 +1,5 @@
 import { BrowserWindow } from "electron";
+import { getDesktopBasePort } from "./desktopPort";
 
 export interface ServerState {
   isStarted: boolean;
@@ -12,14 +13,16 @@ export interface ServerState {
 
 let mainWindow: BrowserWindow | null = null;
 
+const initialPort = getDesktopBasePort();
+
 const serverState: ServerState = {
   isStarted: false,
   status: "idle",
   bootMsg: "Initializing...",
-  initialURL: "http://127.0.0.1:7777",
+  initialURL: `http://127.0.0.1:${initialPort}`,
   error: undefined,
   logs: [],
-  serverPort: 7777,
+  serverPort: initialPort,
 };
 
 export function getMainWindow(): BrowserWindow | null {
