@@ -14,6 +14,7 @@
 import {
   assertProductionGenerationAllowed,
   CLIP_RESOLUTION,
+  parseManualStepMessage,
   STILL_RESOLUTION,
   storyboardRenderVersion,
   stampRenderInputs
@@ -441,7 +442,7 @@ export async function renderShots(
               const versions =
                 current.keyframe_versions ??
                 (current.keyframe ? [current.keyframe] : []);
-              const { failure_reason: _cleared, ...rest } = current;
+              const { failure_reason: _cleared, manual_request: _settled, ...rest } = current;
               return {
                 ...rest,
                 keyframe,
@@ -464,7 +465,7 @@ export async function renderShots(
             }
             const versions =
               current.clip_versions ?? (current.clip ? [current.clip] : []);
-            const { failure_reason: _cleared, ...rest } = current;
+            const { failure_reason: _cleared, manual_request: _settled, ...rest } = current;
             return {
               ...rest,
               clip,
@@ -486,6 +487,19 @@ export async function renderShots(
       return outcome;
     } catch (e) {
       const reason = e instanceof Error ? e.message : String(e);
+      // A provider in assisted mode stops for the user: the shot waits for a
+      // result made by hand, it has not failed.
+      const manual = parseManualStepMessage(reason, {
+        kind: plan.kind === "keyframe" ? "keyframe" : "clip",
+        model: plan.model.model
+      });
+      if (manual) {
+        await writeShot(plan.shotId, (current) => {
+          const { failure_reason: _cleared, manual_request: _settled, ...rest } = current;
+          return { ...rest, status: "awaiting_manual_result", manual_request: manual };
+        });
+        return { ...base, error: `${capability} needs a manual step: ${reason}` };
+      }
       await writeShot(plan.shotId, (current) => ({
         ...current,
         status: "failed",

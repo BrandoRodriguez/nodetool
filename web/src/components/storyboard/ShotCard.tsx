@@ -49,6 +49,7 @@ import { colorForType } from "../../config/data_types";
 import ShotDesignFrame from "./ShotDesignFrame";
 import ShotActions, { shotPreviewClip } from "./ShotActions";
 import ShotMediaViewer from "./ShotMediaViewer";
+import ShotManualResultPanel from "./ShotManualResultPanel";
 import ShotStatusPill, { CLIP_COLOR, isShotGenerating } from "./ShotStatusPill";
 import {
   coveringOneTakeJob,
@@ -506,6 +507,14 @@ const ShotCardInner: React.FC<ShotCardProps> = ({
         </Text>
       </FlexColumn>
 
+      {shot.status === "awaiting_manual_result" && shot.manual_request && (
+        <ShotManualResultPanel
+          boardId={boardId}
+          shotId={shot.id}
+          request={shot.manual_request}
+          readOnly={readOnly}
+        />
+      )}
       {failed && (
         <ErrorBanner
           data-testid="shot-render-error"

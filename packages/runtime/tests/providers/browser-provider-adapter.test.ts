@@ -290,3 +290,20 @@ describe("transport selection", () => {
     await expect(tab.evaluate("1")).rejects.toThrow(/cannot open provider tabs/);
   });
 });
+
+describe("provider access modes", () => {
+  it("tells assisted, automated, api and local apart", async () => {
+    const { providerAccessMode } = await import("../../src/providers/browser-provider-terms.js");
+    expect(providerAccessMode("chatgpt", { NODETOOL_BROWSER_PROVIDER_POLICY: "terms" })).toBe("browser_assisted");
+    expect(providerAccessMode("chatgpt", {})).toBe("browser_automated");
+    expect(providerAccessMode("openai", {})).toBe("api");
+    expect(providerAccessMode("ollama", {})).toBe("local");
+  });
+
+  it("hands over in the shared manual-step format", async () => {
+    const { ManualGenerationRequiredError } = await import("../../src/providers/browser-provider-terms.js");
+    const { parseManualStepMessage } = await import("@nodetool-ai/protocol");
+    const error = new ManualGenerationRequiredError("chatgpt", "P", ["Step one."], "https://chatgpt.com/");
+    expect(parseManualStepMessage(error.message)).toMatchObject({ provider: "chatgpt", prompt: "P", open_url: "https://chatgpt.com/" });
+  });
+});

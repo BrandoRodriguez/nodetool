@@ -10,6 +10,8 @@
  * Without the variable, providers behave as they always have.
  */
 
+import { formatManualStepMessage, type ProviderAccessMode } from "@nodetool-ai/protocol";
+
 export interface BrowserProviderTerms {
   providerId: string;
   host: string;
@@ -52,16 +54,44 @@ export function automationAllowed(providerId: string, env: NodeJS.ProcessEnv = p
   return terms !== undefined && terms.automatedSubmission && terms.automatedRetrieval;
 }
 
+/** Providers that run on this machine. */
+const LOCAL_PROVIDERS = new Set([
+  "ollama",
+  "llama_cpp",
+  "lmstudio",
+  "vllm",
+  "mlx",
+  "transformers_js",
+  "huggingface",
+  "comfy",
+  "wan2gp",
+  "local"
+]);
+
+/**
+ * How a provider is reached here: a site driven by hand or by program, an
+ * official API, or a local model. Browser providers depend on the terms
+ * policy; everything else is classified by id.
+ */
+export function providerAccessMode(providerId: string, env: NodeJS.ProcessEnv = process.env): ProviderAccessMode {
+  if (BROWSER_PROVIDER_TERMS[providerId]) {
+    return automationAllowed(providerId, env) ? "browser_automated" : "browser_assisted";
+  }
+  return LOCAL_PROVIDERS.has(providerId) ? "local" : "api";
+}
+
 /**
  * The provider stopped before sending anything: this step is the user's.
- * `prompt` is exactly what the user should give the site.
+ * `prompt` is exactly what the user should give the site. The message uses
+ * the shared manual-step format, so every surface puts the shot in
+ * `awaiting_manual_result`.
  */
 export class ManualGenerationRequiredError extends Error {
   readonly providerId: string;
   readonly prompt: string;
 
-  constructor(providerId: string, prompt: string, steps: string[]) {
-    super(["Manual step needed. " + steps.join(" "), "", "Prompt:", prompt].join("\n"));
+  constructor(providerId: string, prompt: string, steps: string[], openUrl?: string) {
+    super(formatManualStepMessage({ provider: providerId, prompt, steps, openUrl }));
     this.name = "ManualGenerationRequiredError";
     this.providerId = providerId;
     this.prompt = prompt;

@@ -8226,7 +8226,8 @@
         "still": "still",
         "planned": "planned",
         "stale": "stale",
-        "staleWithStatus": "{{status}} · stale"
+        "staleWithStatus": "{{status}} · stale",
+        "awaitingManualResult": "waiting for your image"
       },
       "shotStillModify": {
         "stillName": "Shot {{index}} still",
@@ -8281,6 +8282,16 @@
           "stillCouldNotAdjust": "The still could not be adjusted.",
           "tryAgain": "Try again."
         }
+      },
+      "manualResult": {
+        "title": "{{provider}}: your turn",
+        "explain": "NodeTool sent nothing to this provider. Copy the prompt, make the image in the provider tab, then import it here (or drop it on this panel).",
+        "copyPrompt": "Copy prompt",
+        "openProvider": "Open {{provider}} tab",
+        "importStill": "Import still",
+        "dropHere": "Drop the image to use it as this shot’s still",
+        "cancel": "Cancel",
+        "notAnImage": "That file is not an image."
       }
     }
   },

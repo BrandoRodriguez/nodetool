@@ -13,7 +13,7 @@ NODETOOL_BROWSER_TRANSPORT=orca electron/scripts/factory/dev-desktop.sh web
 ```
 
 `dev-env.sh` ya define `NODETOOL_BROWSER_TRANSPORT_MODULES=orca=@nodetool-ai/factory-browser-orca`
-y `FACTORY_ORCA_WORKTREE` (el espacio "AI Content Factory" de Orca). Sin
+y `FACTORY_ORCA_WORKTREE` (por defecto `path:<carpeta raíz>`, la carpeta que contiene `nodetool/`; debe estar registrada en Orca con `orca repo add --path <carpeta raíz> --kind folder`). Sin
 `NODETOOL_BROWSER_TRANSPORT=orca`, NodeTool usa el transporte `local`.
 
 Requisitos: Orca abierto y el perfil creado una vez:
@@ -107,7 +107,7 @@ Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción)
 
 | Variable | Por defecto | Uso |
 |---|---|---|
-| `FACTORY_ORCA_WORKTREE` | (obligatoria) | Espacio de Orca, p. ej. `path:/…/AI Content Factory` |
+| `FACTORY_ORCA_WORKTREE` | `path:<carpeta raíz>` en `dev-env.sh` | Espacio de Orca de la carpeta raíz del proyecto |
 | `FACTORY_ORCA_PROFILE_LABEL` / `FACTORY_ORCA_PROFILE_ID` | `AI Content Factory` | Perfil aislado |
 | `FACTORY_ORCA_AUTHORIZED_PAGES` | vacío | Pestañas existentes autorizadas (browserPageId, separadas por comas) |
 | `FACTORY_ORCA_PAGE_ID` | vacío | Reutilizar una pestaña autorizada en vez de abrir una |

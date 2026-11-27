@@ -11,6 +11,7 @@
  */
 
 import { createExtensionTab, type ExtensionTab } from "./extension-tab.js";
+import { BROWSER_PROVIDER_TERMS } from "./browser-provider-terms.js";
 
 const EXTENSION_TRANSPORTS = new Set(["", "local", "extension"]);
 
@@ -72,4 +73,19 @@ export function resolveProviderTab(opts: ResolveProviderTabOptions): ExtensionTa
       await current?.release?.();
     }
   };
+}
+
+/**
+ * Bring a browser provider's authorized tab in front of the user, for a step
+ * left to them. Runs no script and sends nothing to the site. Answers false
+ * when the transport cannot show a tab (the extension), so the caller can
+ * open the site's address instead.
+ */
+export async function showProviderTab(providerId: string, env: NodeJS.ProcessEnv = process.env): Promise<boolean> {
+  const terms = BROWSER_PROVIDER_TERMS[providerId];
+  if (!terms) throw new Error(`Unknown browser provider "${providerId}"`);
+  if (configuredProviderTransport(env) === "extension") return false;
+  const tab = resolveProviderTab({ providerId, host: terms.host, automated: false, env });
+  await tab.focus?.();
+  return true;
 }

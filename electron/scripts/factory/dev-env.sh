@@ -71,6 +71,14 @@ factory_prepare_dirs() {
   fi
   mkdir -p "${FACTORY_TMP_DIR}"
   chmod 700 "${FACTORY_TMP_DIR}"
+  # A link of ours left pointing at a folder that moved (the project folder was
+  # renamed) is repointed here. A link someone else owns is never touched.
+  if [[ -L "${FACTORY_TMP_LINK}" && "$(stat -f %u "${FACTORY_TMP_LINK}")" == "$(id -u)" \
+        && "$(readlink "${FACTORY_TMP_LINK}")" != "${FACTORY_TMP_DIR}" \
+        && "$(readlink "${FACTORY_TMP_LINK}")" == */nodetool-dev-env/tmp \
+        && ! -d "$(readlink "${FACTORY_TMP_LINK}")" ]]; then
+    rm "${FACTORY_TMP_LINK}"
+  fi
   if [[ ! -e "${FACTORY_TMP_LINK}" && ! -L "${FACTORY_TMP_LINK}" ]]; then
     ln -s "${FACTORY_TMP_DIR}" "${FACTORY_TMP_LINK}"
   fi

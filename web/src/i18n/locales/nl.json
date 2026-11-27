@@ -8226,7 +8226,8 @@
         "still": "nog steeds",
         "planned": "gepland",
         "stale": "muf",
-        "staleWithStatus": "{{status}} · oud"
+        "staleWithStatus": "{{status}} · oud",
+        "awaitingManualResult": "waiting for your image"
       },
       "shotStillModify": {
         "stillName": "Schot {{index}} nog steeds",
@@ -8281,6 +8282,16 @@
           "stillCouldNotAdjust": "Het kon nog steeds niet worden aangepast.",
           "tryAgain": "Probeer het opnieuw."
         }
+      },
+      "manualResult": {
+        "title": "{{provider}}: your turn",
+        "explain": "NodeTool sent nothing to this provider. Copy the prompt, make the image in the provider tab, then import it here (or drop it on this panel).",
+        "copyPrompt": "Copy prompt",
+        "openProvider": "Open {{provider}} tab",
+        "importStill": "Import still",
+        "dropHere": "Drop the image to use it as this shot’s still",
+        "cancel": "Cancel",
+        "notAnImage": "That file is not an image."
       }
     }
   },

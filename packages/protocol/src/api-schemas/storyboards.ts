@@ -166,6 +166,19 @@ export const storyboardShot = z
     status: z.string(),
     /** Why the last render failed, while `status` is "failed". */
     failure_reason: z.string().optional(),
+    /** What the user produces by hand, while `status` is "awaiting_manual_result". */
+    manual_request: z
+      .object({
+        provider: z.string(),
+        model: z.string().optional(),
+        access_mode: z.enum(["browser_assisted", "browser_automated", "api", "local"]),
+        kind: z.enum(["keyframe", "clip"]),
+        prompt: z.string(),
+        steps: z.array(z.string()),
+        open_url: z.string().optional(),
+        requested_at: z.string()
+      })
+      .optional(),
     slug: z.string().optional(),
     motion: z.string().optional(),
     /** The picture the shot ends on; a one-take step's "End:". */

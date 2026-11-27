@@ -8354,7 +8354,8 @@
         "still": "ancora",
         "planned": "pianificato",
         "stale": "stantio",
-        "staleWithStatus": "{{status}} · obsoleto"
+        "staleWithStatus": "{{status}} · obsoleto",
+        "awaitingManualResult": "waiting for your image"
       },
       "shotStillModify": {
         "stillName": "Scatto fermo a {{index}}",
@@ -8409,6 +8410,16 @@
           "stillCouldNotAdjust": "L'ancora non può essere regolato.",
           "tryAgain": "Riprova."
         }
+      },
+      "manualResult": {
+        "title": "{{provider}}: your turn",
+        "explain": "NodeTool sent nothing to this provider. Copy the prompt, make the image in the provider tab, then import it here (or drop it on this panel).",
+        "copyPrompt": "Copy prompt",
+        "openProvider": "Open {{provider}} tab",
+        "importStill": "Import still",
+        "dropHere": "Drop the image to use it as this shot’s still",
+        "cancel": "Cancel",
+        "notAnImage": "That file is not an image."
       }
     }
   },

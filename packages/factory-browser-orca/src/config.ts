@@ -103,7 +103,7 @@ export function readOrcaTransportConfig(env: NodeJS.ProcessEnv = process.env): O
   const worktree = env["FACTORY_ORCA_WORKTREE"]?.trim();
   if (!worktree) {
     throw new OrcaPolicyError(
-      "FACTORY_ORCA_WORKTREE is not set. Name the Orca workspace the transport may use, e.g. path:/…/AI Content Factory"
+      "FACTORY_ORCA_WORKTREE is not set. Name the Orca workspace the transport may use, e.g. path:<project root folder>"
     );
   }
   if (worktree === "all" || worktree === "active" || worktree === "current") {

@@ -682,7 +682,7 @@ export class ChatGPTProvider extends BaseProvider {
     if (!automationAllowed(this.provider)) {
       await this.handOver(text, [
         images.length > 0 ? "Attach the shot's reference image(s) in ChatGPT, paste the prompt below and generate one image." : "Paste the prompt below into ChatGPT and generate one image.",
-        "Download it, then on this shot use \"Upload your own still\" (\"Sube tu propio fotograma\").",
+        "Download it, then import it on this shot (Import still in the shot panel, or Upload your own still).",
         `For automatic renders, pick ${BROWSER_PROVIDER_TERMS.chatgpt!.sanctionedAlternative}.`
       ]);
     }
@@ -723,11 +723,16 @@ export class ChatGPTProvider extends BaseProvider {
       log.debug("Could not show the ChatGPT tab", { error: error instanceof Error ? error.message : String(error) });
     }
     const terms = BROWSER_PROVIDER_TERMS.chatgpt!;
-    throw new ManualGenerationRequiredError(this.provider, prompt, [
-      `NodeTool sent nothing to ChatGPT: OpenAI's terms do not allow automated use of chatgpt.com (${terms.termsUrl}).`,
-      "In the ChatGPT tab of the Orca profile \"AI Content Factory\":",
-      ...steps
-    ]);
+    throw new ManualGenerationRequiredError(
+      this.provider,
+      prompt,
+      [
+        `NodeTool sent nothing to ChatGPT: OpenAI's terms do not allow automated use of chatgpt.com (${terms.termsUrl}).`,
+        "In the ChatGPT tab of the Orca profile \"AI Content Factory\":",
+        ...steps
+      ],
+      `${BASE_URL}/`
+    );
   }
 
   /** Bytes of one image part: inline data, a data URI, an asset URI or a URL. */

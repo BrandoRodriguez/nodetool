@@ -47,6 +47,7 @@ export * from "./video-accessories.js";
 export * from "./shot-prompt.js";
 export * from "./one-take.js";
 export * from "./render-record.js";
+export * from "./manual-step.js";
 export * from "./storyboard-render-spec.js";
 export * from "./style-presets.js";
 export * from "./screenplay-authoring.js";

@@ -141,6 +141,16 @@ function toError(args: readonly string[], envelope: Envelope): OrcaError {
     return new OrcaTabGoneError(i >= 0 ? (args[i + 1] ?? "?") : "?");
   }
   if (BUSY_CODES.has(code)) return new OrcaUnavailableError(message, code);
+  if (code === "selector_not_found") {
+    const i = args.indexOf("--worktree");
+    const selector = i >= 0 ? args[i + 1] : "(none)";
+    const folder = selector?.startsWith("path:") ? selector.slice(5) : "<folder>";
+    return new OrcaUnavailableError(
+      `Orca does not know the workspace ${selector}. Add the folder to Orca ` +
+        `(orca repo add --path "${folder}" --kind folder) or set FACTORY_ORCA_WORKTREE.`,
+      "workspace_not_found"
+    );
+  }
   return new OrcaError(code, message);
 }
 

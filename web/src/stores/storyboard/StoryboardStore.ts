@@ -22,6 +22,7 @@ import type {
   CreativeContext,
   Entity,
   ImageRef,
+  ManualResultRequest,
   OneTakeDirection,
   SceneClipDirection,
   Scene,
@@ -297,6 +298,24 @@ interface StoryboardStoreState {
     status: ShotStatus,
     failureReason?: string
   ) => void;
+  /**
+   * The provider left the render to the user (assisted mode): the shot waits
+   * in `"awaiting_manual_result"` with the prompt and steps saved on it, so the
+   * request survives a reload.
+   */
+  setShotAwaitingManual: (
+    boardId: string,
+    shotId: string,
+    request: ManualResultRequest
+  ) => void;
+  /** Drop a manual request: the shot returns to what it had before. */
+  cancelShotManualResult: (boardId: string, shotId: string) => void;
+  /**
+   * An image the user brought in for the shot. A shot waiting for a manual
+   * result takes it as its still and becomes `keyframe_ready`; otherwise the
+   * upload rules apply (a shot with a still keeps it and gains a take).
+   */
+  importShotStill: (boardId: string, shotId: string, still: ImageRef) => void;
   setShotKeyframe: (
     boardId: string,
     shotId: string,
@@ -710,20 +729,27 @@ const patchShot = (
     return board;
   }
   // A failure reason describes the failed status only; any other status
-  // retires it.
+  // retires it. A manual request likewise lives only while the shot waits.
   const clearsFailure =
     patch.status !== undefined &&
     patch.status !== "failed" &&
     target.failure_reason !== undefined;
+  const clearsManual =
+    patch.status !== undefined &&
+    patch.status !== "awaiting_manual_result" &&
+    target.manual_request !== undefined;
   const keys = Object.keys(patch) as Array<keyof Shot>;
   const unchanged = keys.every((k) => Object.is(target[k], patch[k]));
-  if (unchanged && !clearsFailure) {
+  if (unchanged && !clearsFailure && !clearsManual) {
     return board;
   }
   const patched = (s: Shot): Shot => {
     const next = { ...s, ...patch };
     if (clearsFailure) {
       delete next.failure_reason;
+    }
+    if (clearsManual) {
+      delete next.manual_request;
     }
     return next;
   };
@@ -1369,6 +1395,76 @@ export const useStoryboardStore = create<StoryboardStoreState>((set, get) => ({
       // Generation lifecycle, not an authoring edit — keep it out of undo.
       return withBoard(state, boardId, (b) => patchShot(b, shotId, patch), false);
     }),
+
+  setShotAwaitingManual: (boardId, shotId, request) =>
+    set((state) =>
+      withBoard(
+        state,
+        boardId,
+        (b) =>
+          patchShot(b, shotId, {
+            status: "awaiting_manual_result",
+            manual_request: request
+          }),
+        // Generation lifecycle, like setShotStatus.
+        false
+      )
+    ),
+
+  cancelShotManualResult: (boardId, shotId) =>
+    set((state) =>
+      withBoard(
+        state,
+        boardId,
+        (b) => {
+          const target = b.shots.find((s) => s.id === shotId);
+          if (!target || target.status !== "awaiting_manual_result") {
+            return b;
+          }
+          return patchShot(b, shotId, {
+            status: target.clip
+              ? "rendered"
+              : target.keyframe
+                ? "keyframe_ready"
+                : "planned"
+          });
+        },
+        false
+      )
+    ),
+
+  importShotStill: (boardId, shotId, still) =>
+    set((state) =>
+      withBoard(state, boardId, (b) => {
+        const target = b.shots.find((s) => s.id === shotId);
+        if (!target) {
+          return b;
+        }
+        const versions =
+          target.keyframe_versions ??
+          (target.keyframe ? [target.keyframe] : []);
+        const known = versions.some((v) => sameMediaRef(v, still));
+        const nextVersions = known ? versions : [...versions, still];
+        const awaiting = target.status === "awaiting_manual_result";
+        // A shot with a still keeps it: the upload is a candidate take,
+        // accepted in the takes gallery. A shot waiting for this very image,
+        // or one with no still yet, takes it as its still.
+        if (target.keyframe && !awaiting) {
+          return known ? b : patchShot(b, shotId, { keyframe_versions: nextVersions });
+        }
+        const settles =
+          awaiting ||
+          (!target.clip &&
+            (target.status === "planned" || target.status === "failed"));
+        return patchShot(b, shotId, {
+          keyframe: still,
+          keyframe_versions: nextVersions,
+          ...(settles && {
+            status: target.clip ? ("rendered" as const) : ("keyframe_ready" as const)
+          })
+        });
+      })
+    ),
 
   setShotKeyframe: (boardId, shotId, keyframe) =>
     set((state) =>

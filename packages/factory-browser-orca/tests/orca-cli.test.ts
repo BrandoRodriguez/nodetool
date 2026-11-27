@@ -65,6 +65,10 @@ describe("OrcaCli", () => {
       message: "Element not found"
     });
     await expect(cli(async () => ({ stdout: "garbage", exitCode: 1 })).run(["status"])).rejects.toBeInstanceOf(OrcaProtocolError);
+    // A renamed project folder: the configured workspace no longer exists.
+    await expect(
+      cli(async () => fail("selector_not_found")).run(["tab", "show", "--page", "p1", "--worktree", W])
+    ).rejects.toMatchObject({ code: "workspace_not_found", message: expect.stringContaining('orca repo add --path "/factory"') });
   });
 
   it("shares an identical read already in flight", async () => {
