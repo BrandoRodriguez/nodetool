@@ -21,7 +21,15 @@ import { createLogger } from "@nodetool-ai/config";
 import { PROVIDER_IDS } from "@nodetool-ai/protocol";
 import { fetchExternalMedia } from "../external-media-fetch.js";
 import { BaseProvider, type ProviderCapability } from "./base-provider.js";
-import { createExtensionTab, pollTab, stageBytesInTab, type ExtensionTab } from "./extension-tab.js";
+import { pollTab, stageBytesInTab, type ExtensionTab } from "./extension-tab.js";
+import {
+  BROWSER_PROVIDER_TERMS,
+  ManualGenerationRequiredError,
+  ProviderCooldowns,
+  ProviderRateLimitedError,
+  automationAllowed
+} from "./browser-provider-terms.js";
+import { resolveProviderTab } from "./provider-tab.js";
 import { detectImageMime } from "./image-mime.js";
 import { parseToolCalls, toolCallText, toolsPromptSection, toToolSpecs } from "./text-tool-calls.js";
 import type {
@@ -64,24 +72,52 @@ const MAX_POLL_FAILURES = 5;
 const MODELS_TTL_MS = 10 * 60_000;
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/;
 
-let tab: ExtensionTab | null = null;
+let tab: (ExtensionTab & { focus?(): Promise<void> }) | null = null;
 
 /** Replace the tab. Tests use this to avoid a real browser. */
-export function setChatGPTTab(next: ExtensionTab | null): void {
+export function setChatGPTTab(next: (ExtensionTab & { focus?(): Promise<void> }) | null): void {
   tab = next;
   liveModels = null;
+  cooldowns.clear();
+  inflightImages.clear();
 }
 
-function currentTab(): ExtensionTab {
-  return (tab ??= createExtensionTab(HOST));
+/** The tab on the configured browser transport (the extension when none is set). */
+function currentTab(): ExtensionTab & { focus?(): Promise<void> } {
+  return (tab ??= resolveProviderTab({
+    providerId: PROVIDER_IDS.CHATGPT,
+    host: HOST,
+    automated: automationAllowed(PROVIDER_IDS.CHATGPT)
+  }));
+}
+
+/** HTTP 429 blocks every call path until the site's Retry-After has passed. */
+const cooldowns = new ProviderCooldowns();
+
+/** Identical image requests in flight share one turn instead of submitting twice. */
+const inflightImages = new Map<string, Promise<Uint8Array>>();
+
+/**
+ * A page script reports HTTP 429 as `HTTP 429 retry-after=<value>`. Turn it
+ * into a cooldown and an error that stops the whole operation.
+ */
+function rateLimitOf(error: unknown): ProviderRateLimitedError | null {
+  if (error instanceof ProviderRateLimitedError) return error;
+  const match = error instanceof Error ? /HTTP 429(?: retry-after=(\S*))?/.exec(error.message) : null;
+  return match ? cooldowns.block(PROVIDER_IDS.CHATGPT, match[1] || null) : null;
 }
 
 /** Calls share one tab, so each waits for the previous one. */
 let activeSignal: AbortSignal | undefined;
 let queue: Promise<unknown> = Promise.resolve();
 function serialized<T>(run: () => Promise<T>): Promise<T> {
+  cooldowns.assertReady(PROVIDER_IDS.CHATGPT);
   const owned = async (): Promise<T> => {
-    try { return await run(); }
+    try {
+      // A call queued before a 429 must not go out after it.
+      cooldowns.assertReady(PROVIDER_IDS.CHATGPT);
+      return await run();
+    }
     finally { activeSignal = undefined; await tab?.release?.(); }
   };
   const next = queue.then(owned, owned);
@@ -152,7 +188,7 @@ async function evaluate<T>(expression: string, timeoutMs?: number): Promise<T> {
     return (await currentTab().evaluate(expression, timeoutMs, activeSignal)) as T;
   } catch (error) {
     if (signedOut(error)) throw signInError();
-    throw error;
+    throw rateLimitOf(error) ?? error;
   }
 }
 
@@ -162,7 +198,7 @@ async function poll<T>(expression: string, timeoutMs: number): Promise<T | null>
     return await pollTab<T>(currentTab(), expression, timeoutMs, activeSignal);
   } catch (error) {
     if (signedOut(error)) throw signInError();
-    throw error;
+    throw rateLimitOf(error) ?? error;
   }
 }
 
@@ -182,7 +218,7 @@ async function readConversation(conversationId: string): Promise<ConversationSta
   return evaluate<ConversationState>(`/*nt:conversation*/ (async () => {
     ${AUTH}
     const response = await fetch("/backend-api/conversation/" + ${JSON.stringify(conversationId)}, { headers: __auth });
-    if (!response.ok) throw new Error("ChatGPT conversation request failed: HTTP " + response.status);
+    if (!response.ok) throw new Error("ChatGPT conversation request failed: HTTP " + response.status + (response.status === 429 ? " retry-after=" + (response.headers.get("retry-after") || "") : ""));
     const data = await response.json();
     const path = [];
     let node = data.mapping && data.mapping[data.current_node];
@@ -304,6 +340,9 @@ async function waitForReply(conversationId: string, timeoutMs: number, signal?: 
       failures = 0;
     } catch (error) {
       if (error instanceof Error && error.message.startsWith("ChatGPT is not signed in")) throw error;
+      // Rate limited: stop polling at once. The turn already went out; the
+      // conversation keeps its reply, and nothing is resent.
+      if (error instanceof ProviderRateLimitedError) throw error;
       log.warn("ChatGPT poll failed", { conversationId, failures: failures + 1, error: error instanceof Error ? error.message : String(error) });
       if (++failures > MAX_POLL_FAILURES) throw error;
     }
@@ -332,6 +371,9 @@ async function runTurnHoldingTab(request: TurnRequest): Promise<TurnResult> {
     try {
       before = (await readConversation(request.conversationId)).currentNode;
     } catch (error) {
+      // A 429 is not a missing thread: opening another conversation would
+      // resend the whole history to a site that asked for less traffic.
+      if (error instanceof ProviderRateLimitedError) throw error;
       throw new ThreadUnavailableError(error instanceof Error ? error.message : String(error));
     }
   } else {
@@ -366,11 +408,11 @@ async function downloadImage(conversationId: string, pointer: string): Promise<U
   const base64 = await evaluate<string>(`/*nt:download*/ (async () => {
     ${AUTH}
     const meta = await fetch("/backend-api/files/download/" + ${JSON.stringify(fileId)} + "?conversation_id=" + ${JSON.stringify(conversationId)} + "&inline=false", { headers: __auth });
-    if (!meta.ok) throw new Error("ChatGPT file lookup failed: HTTP " + meta.status);
+    if (!meta.ok) throw new Error("ChatGPT file lookup failed: HTTP " + meta.status + (meta.status === 429 ? " retry-after=" + (meta.headers.get("retry-after") || "") : ""));
     const info = await meta.json();
     if (!info.download_url) throw new Error("ChatGPT returned no download URL for the image");
     const response = await fetch(info.download_url, { credentials: "include" });
-    if (!response.ok) throw new Error("ChatGPT image download failed: HTTP " + response.status);
+    if (!response.ok) throw new Error("ChatGPT image download failed: HTTP " + response.status + (response.status === 429 ? " retry-after=" + (response.headers.get("retry-after") || "") : ""));
     const bytes = new Uint8Array(await response.arrayBuffer());
     let binary = "";
     for (let i = 0; i < bytes.length; i += 0x8000) binary += String.fromCharCode.apply(null, bytes.subarray(i, i + 0x8000));
@@ -560,6 +602,12 @@ export class ChatGPTProvider extends BaseProvider {
     loadFullHistory?: () => Promise<Message[]>;
     signal?: AbortSignal;
   }): Promise<{ result: TurnResult; session: ProviderSession }> {
+    if (!automationAllowed(this.provider)) {
+      await this.handOver(composePrompt(args.messages, args.tools ?? []), [
+        "Paste the prompt below into ChatGPT and continue there,",
+        `or pick ${BROWSER_PROVIDER_TERMS.chatgpt!.sanctionedAlternative} for automatic replies.`
+      ]);
+    }
     const tools = args.tools ?? [];
     const systemHash = hashSystemPrompt(args.messages, tools);
     const threadId = args.threadId ?? null;
@@ -631,9 +679,24 @@ export class ChatGPTProvider extends BaseProvider {
       aspectHint(params.aspectRatio, params.width, params.height),
       params.negativePrompt ? `Avoid: ${params.negativePrompt}.` : ""
     ].filter(Boolean).join("\n\n");
+    if (!automationAllowed(this.provider)) {
+      await this.handOver(text, [
+        images.length > 0 ? "Attach the shot's reference image(s) in ChatGPT, paste the prompt below and generate one image." : "Paste the prompt below into ChatGPT and generate one image.",
+        "Download it, then import it on this shot (Import still in the shot panel, or Upload your own still).",
+        `For automatic renders, pick ${BROWSER_PROVIDER_TERMS.chatgpt!.sanctionedAlternative}.`
+      ]);
+    }
+    // Two identical requests in flight are one generation: the second waits
+    // for the first instead of submitting again.
+    const key = createHash("sha256")
+      .update(text)
+      .update(images.map((image) => createHash("sha256").update(image).digest("hex")).join(","))
+      .digest("hex");
+    const pending = inflightImages.get(key);
+    if (pending) return pending;
     // The download runs in the same turn on the tab, so no other call can
     // navigate the tab away in between.
-    return serialized(async () => {
+    const run = serialized(async () => {
       const result = await runTurnHoldingTab({ model: CHATGPT_IMAGE_MODEL, text, images, timeoutMs: IMAGE_TIMEOUT_MS, signal: params.signal });
       const pointer = result.images.at(-1);
       if (!pointer) {
@@ -641,7 +704,35 @@ export class ChatGPTProvider extends BaseProvider {
         throw new Error(`ChatGPT finished without an image${said ? `: ${said.slice(0, 300)}` : ""}. The conversation is ${BASE_URL}/c/${result.conversationId}`);
       }
       return downloadImage(result.conversationId, pointer);
+    }).finally(() => {
+      if (inflightImages.get(key) === run) inflightImages.delete(key);
     });
+    inflightImages.set(key, run);
+    return run;
+  }
+
+  /**
+   * Stop before anything reaches the site: the provider's terms leave this
+   * step to the user. Shows the signed-in tab when the transport can, then
+   * throws the prompt and the steps to finish by hand.
+   */
+  private async handOver(prompt: string, steps: string[]): Promise<never> {
+    try {
+      await currentTab().focus?.();
+    } catch (error) {
+      log.debug("Could not show the ChatGPT tab", { error: error instanceof Error ? error.message : String(error) });
+    }
+    const terms = BROWSER_PROVIDER_TERMS.chatgpt!;
+    throw new ManualGenerationRequiredError(
+      this.provider,
+      prompt,
+      [
+        `NodeTool sent nothing to ChatGPT: OpenAI's terms do not allow automated use of chatgpt.com (${terms.termsUrl}).`,
+        "In the ChatGPT tab of the Orca profile \"AI Content Factory\":",
+        ...steps
+      ],
+      `${BASE_URL}/`
+    );
   }
 
   /** Bytes of one image part: inline data, a data URI, an asset URI or a URL. */

@@ -18,6 +18,7 @@
 import { z } from "zod";
 
 import type { ImageRef, Provider, VideoRef } from "./api-types.js";
+import type { ManualResultRequest } from "./manual-step.js";
 import type {
   ProductionRequirement,
   ProductionTakeMetadata
@@ -322,7 +323,9 @@ export type ShotStatus =
   | "approved" // legacy (pre-selection approval step); treated as keyframe_ready
   | "clip_generating"
   | "rendered" // final clip generated
-  | "failed";
+  | "failed"
+  // the provider left the render to the user (assisted mode); see manual_request
+  | "awaiting_manual_result";
 
 export const cameraPresetIdsSchema = z.array(z.string()).max(3);
 
@@ -621,6 +624,12 @@ export interface Shot {
    * board can still say why after a reload. Cleared when the status moves on.
    */
   failure_reason?: string;
+  /**
+   * What the user is to produce by hand, kept while {@link status} is
+   * `"awaiting_manual_result"` so the request survives a reload. Cleared when
+   * the status moves on (an import, a cancel or a new render).
+   */
+  manual_request?: ManualResultRequest;
   /** Estimated cost to render this shot's clip, for the gate. */
   cost_estimate?: number | null;
   notes?: string;

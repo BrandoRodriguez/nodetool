@@ -13,7 +13,7 @@ NODETOOL_BROWSER_TRANSPORT=orca electron/scripts/factory/dev-desktop.sh web
 ```
 
 `dev-env.sh` ya define `NODETOOL_BROWSER_TRANSPORT_MODULES=orca=@nodetool-ai/factory-browser-orca`
-y `FACTORY_ORCA_WORKTREE` (el espacio "AI Content Factory" de Orca). Sin
+y `FACTORY_ORCA_WORKTREE` (por defecto `path:<carpeta raíz>`, la carpeta que contiene `nodetool/`; debe estar registrada en Orca con `orca repo add --path <carpeta raíz> --kind folder`). Sin
 `NODETOOL_BROWSER_TRANSPORT=orca`, NodeTool usa el transporte `local`.
 
 Requisitos: Orca abierto y el perfil creado una vez:
@@ -34,6 +34,32 @@ nunca escribe credenciales ni lee cookies. Los passkeys, llaves de seguridad,
 captchas y pasos de verificación se dejan siempre al usuario: el transporte se
 detiene con `human_action_required`.
 
+## Proveedores multimedia (`openProviderTab`)
+
+Un proveedor de NodeTool que trabaja sobre un sitio con sesión iniciada (por
+ejemplo ChatGPT Images) pide su pestaña al transporte configurado a través de
+`packages/runtime/src/providers/provider-tab.ts`. Con Orca:
+
+- La pestaña es la que autorizas para ese proveedor en
+  `FACTORY_ORCA_PROVIDER_TABS` (`chatgpt=<browserPageId>`), en el perfil y el
+  espacio de la fábrica y exactamente en el host del proveedor. Las pestañas
+  autorizadas para el navegador del agente no cuentan.
+- Los scripts del proveedor van por un canal propio: se comprueba el host
+  dentro del propio script y se rechaza cualquier resultado con forma de
+  credencial (JWT, `Bearer`, claves `sk-`, campos `accessToken`, `cookie`…).
+  Los agentes no llegan a ese canal y `FACTORY_ORCA_ALLOW_PAGE_SCRIPTS` no lo
+  abre.
+- La navegación queda dentro de `https://<host del proveedor>`.
+- En modo asistido (`automated: false`) la pestaña solo se muestra
+  (`tab switch --focus`): ningún script se ejecuta y nada se navega.
+
+Con `NODETOOL_BROWSER_PROVIDER_POLICY=terms` (por defecto en `dev-env.sh`), un
+proveedor cuyas condiciones prohíben el uso automatizado trabaja en modo
+asistido. ChatGPT es uno de ellos (Terms of Use de OpenAI): NodeTool no envía
+nada, enfoca tu pestaña de ChatGPT y el plano del storyboard queda en `failed`
+con el prompt exacto y los pasos: generar en ChatGPT, descargar y usar "Sube
+tu propio fotograma". Para renders automáticos, el proveedor OpenAI por API.
+
 ## Arquitectura
 
 | Archivo | Responsabilidad |
@@ -45,6 +71,7 @@ detiene con `human_action_required`.
 | `src/media.ts` | Captura de medios con `fetch` dentro de la página, tamaño máximo, transferencia por trozos, liberación en `finally` |
 | `src/config.ts` | Variables `FACTORY_ORCA_*`, límites y directorio de trabajo dentro del entorno aislado |
 | `src/transport.ts` | Fábrica `browserTransport` y capacidades declaradas |
+| `src/provider-tab.ts` | `openProviderTab`: pestaña autorizada por proveedor, canal de scripts del proveedor, modo asistido |
 
 El núcleo solo aporta la interfaz `BrowserPage` y el registro de transportes
 de `@nodetool-ai/browser` (`transport-registry.ts`).
@@ -80,7 +107,7 @@ Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción)
 
 | Variable | Por defecto | Uso |
 |---|---|---|
-| `FACTORY_ORCA_WORKTREE` | (obligatoria) | Espacio de Orca, p. ej. `path:/…/AI Content Factory` |
+| `FACTORY_ORCA_WORKTREE` | `dev-env.sh`: el espacio de `ORCA_WORKTREE_ID` si su carpeta resuelve a la raíz del proyecto; si no, `path:<carpeta raíz>` | Espacio de Orca de la carpeta raíz del proyecto |
 | `FACTORY_ORCA_PROFILE_LABEL` / `FACTORY_ORCA_PROFILE_ID` | `AI Content Factory` | Perfil aislado |
 | `FACTORY_ORCA_AUTHORIZED_PAGES` | vacío | Pestañas existentes autorizadas (browserPageId, separadas por comas) |
 | `FACTORY_ORCA_PAGE_ID` | vacío | Reutilizar una pestaña autorizada en vez de abrir una |
@@ -93,6 +120,7 @@ Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción)
 | `FACTORY_ORCA_CONSOLE_POLL_MS` | `2000` | `0` desactiva el sondeo de consola |
 | `FACTORY_ORCA_ALLOW_PAGE_SCRIPTS` | `0` | `1` permite que `browser_console_exec` ejecute texto de script en la pestaña con sesión iniciada |
 | `FACTORY_ORCA_RATE_LIMIT_COOLDOWN_MS` | `60000` | Bloqueo de un origen tras HTTP 429 cuando no indica `Retry-After` |
+| `FACTORY_ORCA_PROVIDER_TABS` | vacío | Pestaña autorizada por proveedor multimedia (`chatgpt=<browserPageId>`) |
 | `FACTORY_ORCA_CLI` | `ORCA_CLI_COMMAND` o `orca` | Ejecutable de Orca |
 
 ## Pruebas

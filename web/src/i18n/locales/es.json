@@ -8354,7 +8354,8 @@
         "still": "todavía",
         "planned": "planeado",
         "stale": "rancio",
-        "staleWithStatus": "{{status}} · obsoleto"
+        "staleWithStatus": "{{status}} · obsoleto",
+        "awaitingManualResult": "esperando tu imagen"
       },
       "shotStillModify": {
         "stillName": "Disparo {{index}} todavía",
@@ -8409,6 +8410,16 @@
           "stillCouldNotAdjust": "El todavía no se pudo ajustar.",
           "tryAgain": "Inténtalo de nuevo."
         }
+      },
+      "manualResult": {
+        "title": "{{provider}}: te toca a ti",
+        "explain": "NodeTool no envió nada a este proveedor. Copia el prompt, genera la imagen en la pestaña del proveedor e impórtala aquí (o suéltala sobre este panel).",
+        "copyPrompt": "Copiar prompt",
+        "openProvider": "Abrir pestaña de {{provider}}",
+        "importStill": "Importar fotograma",
+        "dropHere": "Suelta la imagen para usarla como fotograma de este plano",
+        "cancel": "Cancelar",
+        "notAnImage": "Ese archivo no es una imagen."
       }
     }
   },

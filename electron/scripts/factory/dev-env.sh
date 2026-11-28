@@ -71,6 +71,14 @@ factory_prepare_dirs() {
   fi
   mkdir -p "${FACTORY_TMP_DIR}"
   chmod 700 "${FACTORY_TMP_DIR}"
+  # A link of ours left pointing at a folder that moved (the project folder was
+  # renamed) is repointed here. A link someone else owns is never touched.
+  if [[ -L "${FACTORY_TMP_LINK}" && "$(stat -f %u "${FACTORY_TMP_LINK}")" == "$(id -u)" \
+        && "$(readlink "${FACTORY_TMP_LINK}")" != "${FACTORY_TMP_DIR}" \
+        && "$(readlink "${FACTORY_TMP_LINK}")" == */nodetool-dev-env/tmp \
+        && ! -d "$(readlink "${FACTORY_TMP_LINK}")" ]]; then
+    rm "${FACTORY_TMP_LINK}"
+  fi
   if [[ ! -e "${FACTORY_TMP_LINK}" && ! -L "${FACTORY_TMP_LINK}" ]]; then
     ln -s "${FACTORY_TMP_DIR}" "${FACTORY_TMP_LINK}"
   fi
@@ -84,6 +92,23 @@ factory_prepare_dirs() {
 }
 
 # Exports the runtime isolation. Call it in the shell that starts the servers.
+# The Orca workspace of this project. Inside an Orca terminal, Orca names it in
+# ORCA_WORKTREE_ID (<repo-id>::<path>); that one is used when its folder is
+# this project's root, even under an earlier name of the folder that now
+# resolves here. Elsewhere the root folder's path selects it.
+factory_orca_worktree() {
+  local root id_path
+  root="$(cd "$(dirname "${FACTORY_REPO_DIR}")" && pwd -P)"
+  if [[ -n "${ORCA_WORKTREE_ID:-}" && "${ORCA_WORKTREE_ID}" == *::/* ]]; then
+    id_path="${ORCA_WORKTREE_ID#*::}"
+    if [[ -d "${id_path}" && "$(cd "${id_path}" && pwd -P)" == "${root}" ]]; then
+      printf 'id:%s' "${ORCA_WORKTREE_ID}"
+      return
+    fi
+  fi
+  printf 'path:%s' "${root}"
+}
+
 factory_runtime_env() {
   # HOME moves every ~/.config/nodetool and ~/.local/share/nodetool lookup
   # (settings.yaml, packs.json, users.json, MCP config, database, assets,
@@ -121,7 +146,12 @@ factory_runtime_env() {
   # isolated "AI Content Factory" profile (packages/factory-browser-orca).
   export NODETOOL_BROWSER_TRANSPORT="${NODETOOL_BROWSER_TRANSPORT:-local}"
   export NODETOOL_BROWSER_TRANSPORT_MODULES="${NODETOOL_BROWSER_TRANSPORT_MODULES:-orca=@nodetool-ai/factory-browser-orca}"
-  export FACTORY_ORCA_WORKTREE="${FACTORY_ORCA_WORKTREE:-path:$(dirname "${FACTORY_REPO_DIR}")}"
+  export FACTORY_ORCA_WORKTREE="${FACTORY_ORCA_WORKTREE:-$(factory_orca_worktree)}"
   export FACTORY_ORCA_PROFILE_LABEL="${FACTORY_ORCA_PROFILE_LABEL:-AI Content Factory}"
+  # Media providers that drive a consumer website honour that site's terms:
+  # where they forbid automated use (ChatGPT), the provider hands the step to
+  # the user instead of sending anything. FACTORY_ORCA_PROVIDER_TABS names the
+  # tab each provider may use (providerId=browserPageId).
+  export NODETOOL_BROWSER_PROVIDER_POLICY="${NODETOOL_BROWSER_PROVIDER_POLICY:-terms}"
   export ELECTRON_ENABLE_LOGGING=1
 }

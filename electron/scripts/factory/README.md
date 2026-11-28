@@ -13,7 +13,7 @@ perfil de Electron ni credenciales.
 
 ## Qué queda aislado
 
-Todo el estado vive en `AI Content Factory/nodetool-dev-env/`, fuera del
+Todo el estado vive en `nodetool-dev-env/`, junto a `nodetool/` en la carpeta raíz del proyecto (se detecta a partir de la ubicación de los scripts), fuera del
 repositorio.
 
 | Recurso | App instalada | Entorno de desarrollo |
@@ -51,7 +51,7 @@ Más detalles:
 ## Primera instalación
 
 ```bash
-cd "AI Content Factory/nodetool"
+cd <carpeta raíz>/nodetool
 electron/scripts/factory/install-node.sh            # Node de .nvmrc, darwin-arm64, con checksum
 source electron/scripts/factory/dev-env.sh
 npm ci --no-audit --no-fund                          # dependencias de la raíz; mobile/ no se instala

@@ -264,6 +264,15 @@ export { AntigravityProvider };
 export { CopilotProvider };
 export { DreaminaProvider, setDreaminaPageRunner, type DreaminaPageRunner } from "./dreamina-provider.js";
 export { ChatGPTProvider, setChatGPTTab } from "./chatgpt-provider.js";
+export { configuredProviderTransport, resolveProviderTab, showProviderTab } from "./provider-tab.js";
+export {
+  BROWSER_PROVIDER_TERMS,
+  ManualGenerationRequiredError,
+  ProviderRateLimitedError,
+  automationAllowed,
+  enforceProviderTerms,
+  providerAccessMode
+} from "./browser-provider-terms.js";
 export { GeminiWebProvider, setGeminiWebTab } from "./gemini-web-provider.js";
 export { GoogleFlowProvider, setGoogleFlowTab } from "./google-flow-provider.js";
 export { GOOGLE_FLOW_IMAGE_MODELS, GOOGLE_FLOW_VIDEO_MODELS } from "./google-flow-models.js";

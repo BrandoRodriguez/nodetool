@@ -41,6 +41,7 @@ const PAGE_COMMANDS = new Set([
   "mouse wheel",
   "exec",
   "tab show",
+  "tab switch",
   "tab close"
 ]);
 

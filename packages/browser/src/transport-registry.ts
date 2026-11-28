@@ -54,6 +54,34 @@ export interface BrowserTransportSession {
   captureMedia?(input: BrowserCaptureMediaInput): Promise<BrowserCaptureMediaRaw>;
 }
 
+/**
+ * What a media provider asks a transport for: the signed-in tab of one site.
+ * `automated` says whether the provider's own scripts may run in it; when
+ * false the tab is only shown to the user, who does the work by hand.
+ */
+export interface ProviderTabSpec {
+  providerId: string;
+  /** The site's host, e.g. `chatgpt.com`. The tab must be on exactly this host. */
+  host: string;
+  automated: boolean;
+}
+
+/**
+ * A provider's signed-in tab. This is a channel for the provider's own fixed
+ * scripts, kept apart from the agent browser actions: an agent never reaches
+ * it, so the agent page-script setting does not apply here.
+ */
+export interface ProviderTab {
+  /** Run one of the provider's scripts (a JS expression, may be a promise) and return its JSON value. */
+  evaluate(expression: string, timeoutMs?: number, signal?: AbortSignal): Promise<unknown>;
+  /** Navigate within the provider's host and wait for the load event. */
+  navigate(url: string, signal?: AbortSignal): Promise<void>;
+  /** Bring the tab in front of the user, for a step only the user may take. */
+  focus?(): Promise<void>;
+  /** End this use of the tab. The tab itself stays open. */
+  release?(): Promise<void>;
+}
+
 export interface BrowserTransportFactory {
   /** The value of `NODETOOL_BROWSER_TRANSPORT` that selects this transport. */
   id: string;
@@ -62,6 +90,8 @@ export interface BrowserTransportFactory {
   open(opts: {
     viewport: { width: number; height: number };
   }): Promise<BrowserTransportSession>;
+  /** A provider's signed-in tab. Absent when the transport cannot serve providers. */
+  openProviderTab?(spec: ProviderTabSpec): Promise<ProviderTab>;
 }
 
 const registry = new Map<string, BrowserTransportFactory>();

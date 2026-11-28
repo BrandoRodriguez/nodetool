@@ -76,6 +76,9 @@ const lifecyclePill = (
   if (shot.status === "failed") {
     return { tone: "failed", label: "failed" };
   }
+  if (shot.status === "awaiting_manual_result") {
+    return { tone: "warning", label: "awaiting manual result" };
+  }
   if (shot.clip) {
     return null;
   }
@@ -130,6 +133,7 @@ const ShotStatusPillInner = ({
     "rendering clip": "renderingClip",
     "rendering still": "renderingStill",
     failed: "failed",
+    "awaiting manual result": "awaitingManualResult",
     covered: "covered",
     "still · clip queued": "stillClipQueued",
     still: "still",

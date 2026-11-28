@@ -1,7 +1,7 @@
 import { readFileSync } from "node:fs";
 import { createCatalog } from "@nodetool-ai/presets";
 import { describe, expect, it, vi } from "vitest";
-import { productionRequirement } from "@nodetool-ai/protocol";
+import { formatManualStepMessage, productionRequirement } from "@nodetool-ai/protocol";
 import type { Entity, ImageRef, Shot } from "@nodetool-ai/protocol";
 import type { StoryboardDocument } from "../src/document.js";
 import { planShotRenders } from "../src/render-plan.js";
@@ -502,6 +502,77 @@ describe("renderShots", () => {
     expect(outcomes[0].error).toBe("text_to_image failed: provider is down");
     expect(state.document.shots[0].status).toBe("failed");
     expect(state.document.shots[0].failure_reason).toBe("provider is down");
+  });
+
+  it("puts a shot the provider handed to the user in awaiting_manual_result", async () => {
+    const message = formatManualStepMessage({
+      provider: "chatgpt",
+      prompt: "Create one image.\n\nA lighthouse at dawn",
+      steps: ["NodeTool sent nothing to ChatGPT.", "Paste the prompt below into ChatGPT and generate one image."],
+      openUrl: "https://chatgpt.com/"
+    });
+    const doc = board([{ ...shot({ id: "s1", index: 0 }), status: "failed", failure_reason: "earlier failure" }]);
+    const { host, state } = fakeHost(doc, {
+      runGeneration: async () => {
+        throw new Error(message);
+      }
+    });
+
+    const outcomes = await renderShots(host, { id: "b1" }, planShotRenders(doc, NO_ENTITIES, "keyframe"));
+
+    expect(outcomes[0].ok).toBe(false);
+    expect(outcomes[0].error).toContain("needs a manual step");
+    const saved = state.document.shots[0];
+    expect(saved.status).toBe("awaiting_manual_result");
+    expect(saved).not.toHaveProperty("failure_reason");
+    expect(saved.manual_request).toMatchObject({
+      provider: "chatgpt",
+      access_mode: "browser_assisted",
+      kind: "keyframe",
+      prompt: "Create one image.\n\nA lighthouse at dawn",
+      open_url: "https://chatgpt.com/"
+    });
+  });
+
+  it("clears the manual request when a later render succeeds", async () => {
+    const doc = board([
+      {
+        ...shot({ id: "s1", index: 0 }),
+        status: "awaiting_manual_result",
+        manual_request: {
+          provider: "chatgpt",
+          access_mode: "browser_assisted",
+          kind: "keyframe",
+          prompt: "p",
+          steps: [],
+          requested_at: "2026-11-27T18:00:00.000Z"
+        }
+      }
+    ]);
+    const { host, state } = fakeHost(doc);
+
+    await renderShots(host, { id: "b1" }, planShotRenders(doc, NO_ENTITIES, "keyframe"));
+
+    expect(state.document.shots[0].status).toBe("keyframe_ready");
+    expect(state.document.shots[0]).not.toHaveProperty("manual_request");
+  });
+
+  it("marks the shot failed with the wait when the provider is rate limited", async () => {
+    const doc = board([shot({ id: "s1", index: 0 }), shot({ id: "s2", index: 1 })]);
+    let calls = 0;
+    const { host, state } = fakeHost(doc, {
+      runGeneration: async () => {
+        calls += 1;
+        throw new Error("chatgpt answered HTTP 429 (too many requests). Wait 120 s before trying again; nothing was resent.");
+      }
+    });
+
+    await renderShots(host, { id: "b1" }, planShotRenders(doc, NO_ENTITIES, "keyframe"));
+
+    expect(state.document.shots.map((s) => s.status)).toEqual(["failed", "failed"]);
+    expect(state.document.shots[0].failure_reason).toContain("Wait 120 s");
+    // Each shot made one call; the provider, not the board, refuses the second.
+    expect(calls).toBe(2);
   });
 
   it("clears the saved failure reason when a later render succeeds", async () => {

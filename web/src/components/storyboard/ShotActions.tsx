@@ -49,6 +49,7 @@ import {
 import { useAssetUpload } from "../../serverState/useAssetUpload";
 import { useNotificationStore } from "../../stores/NotificationStore";
 import { mediaRefFromAsset } from "../../utils/mediaRef";
+import { useImportShotStill } from "../../hooks/storyboard/useImportShotStill";
 import { captureLastFrame } from "./lastFrame";
 
 /**
@@ -161,9 +162,6 @@ const ShotActionsInner: React.FC<ShotActionsProps> = ({
     )
   );
   const previousClipUri = useResolvedMediaUri(previousClip);
-  const appendShotKeyframeVersion = useStoryboardStore(
-    (state) => state.appendShotKeyframeVersion
-  );
   const uploadAsset = useAssetUpload((state) => state.uploadAsset);
 
   const isGenerating = isShotGenerating(shot);
@@ -219,53 +217,7 @@ const ShotActionsInner: React.FC<ShotActionsProps> = ({
   // still: current media changes only when the creator accepts it in the takes
   // gallery. A shot with no still takes the upload as its still, the same as a
   // first generated still, so the card shows it and the clip can start from it.
-  const handleUpload = useCallback(
-    (files: File[]) => {
-      const file = files[0];
-      if (!file) {
-        return;
-      }
-      uploadAsset({
-        file,
-        onCompleted: (asset) => {
-          const still = mediaRefFromAsset(asset, "image");
-          const current = useStoryboardStore
-            .getState()
-            .getBoard(boardId)
-            ?.shots.find((candidate) => candidate.id === shot.id);
-          if (!current || current.keyframe) {
-            appendShotKeyframeVersion(boardId, shot.id, still);
-            return;
-          }
-          setShotKeyframe(boardId, shot.id, still);
-          if (
-            !current.clip &&
-            (current.status === "planned" || current.status === "failed")
-          ) {
-            setShotStatus(boardId, shot.id, "keyframe_ready");
-          }
-        },
-        onFailed: (error) =>
-          useNotificationStore.getState().addNotification({
-            type: "error",
-            alert: true,
-            dismissable: true,
-            content: t("screens4_15.storyboard.shotCard.uploadFailed", {
-              error
-            })
-          })
-      });
-    },
-    [
-      uploadAsset,
-      appendShotKeyframeVersion,
-      setShotKeyframe,
-      setShotStatus,
-      boardId,
-      shot.id,
-      t
-    ]
-  );
+  const handleUpload = useImportShotStill(boardId, shot.id);
 
   // The previous shot's last frame becomes this shot's current still, so the
   // two clips cut on the same picture. Earlier stills stay as takes.

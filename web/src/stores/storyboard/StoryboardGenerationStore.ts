@@ -35,7 +35,11 @@ import {
   mediaEditTakeMetadata,
   withResolvedMediaEditReferences
 } from "@nodetool-ai/timeline";
-import { currentRenderInputs, stampRenderInputs } from "@nodetool-ai/protocol";
+import {
+  currentRenderInputs,
+  parseManualStepMessage,
+  stampRenderInputs
+} from "@nodetool-ai/protocol";
 import {
   globalWebSocketManager,
   type WebSocketMessage
@@ -420,6 +424,29 @@ const notifyShotFailure = (job: ShotJobState): void => {
   });
 };
 
+/**
+ * Settle a shot whose render did not produce media. A provider in assisted
+ * mode stops on purpose and leaves the step to the user: that shot waits in
+ * `awaiting_manual_result` with the request saved on it, and nothing is
+ * reported as an error. Every other reason marks the shot failed and toasts.
+ */
+const settleUnproducedShot = (
+  job: ShotJobState,
+  errorMessage: string | undefined
+): void => {
+  const manual = parseManualStepMessage(errorMessage, { kind: job.kind });
+  if (manual) {
+    useStoryboardStore
+      .getState()
+      .setShotAwaitingManual(job.boardId, job.shotId, manual);
+    return;
+  }
+  useStoryboardStore
+    .getState()
+    .setShotStatus(job.boardId, job.shotId, "failed", errorMessage);
+  notifyShotFailure(job);
+};
+
 // ── Store ────────────────────────────────────────────────────────────────────
 
 export const useStoryboardGenerationStore =
@@ -750,15 +777,7 @@ export const useStoryboardGenerationStore =
             }
             notifyShotFailure(updated);
           } else if (status === "failed" && !existing.mediaEdit) {
-            useStoryboardStore
-              .getState()
-              .setShotStatus(
-                existing.boardId,
-                shotId,
-                "failed",
-                updated.errorMessage
-              );
-            notifyShotFailure(updated);
+            settleUnproducedShot(updated, updated.errorMessage);
           } else if (status === "failed" && existing.mediaEdit) {
             const shot = useStoryboardStore
               .getState()
@@ -879,12 +898,10 @@ export const useStoryboardGenerationStore =
                     (shot.clip ? "rendered" : "keyframe_ready")
                 );
             }
+            notifyShotFailure(jobState);
           } else {
-            useStoryboardStore
-              .getState()
-              .setShotStatus(boardId, shotId, "failed", errorMessage);
+            settleUnproducedShot(jobState, errorMessage);
           }
-          notifyShotFailure(jobState);
         },
 
         dismissBatch: (batchId) => {

@@ -16,6 +16,7 @@ import { OrcaCli, type OrcaRunner } from "./orca-cli.js";
 import { OrcaPage } from "./orca-page.js";
 import { OrcaPolicy } from "./policy.js";
 import { TabScope } from "./tab-scope.js";
+import { openOrcaProviderTab } from "./provider-tab.js";
 
 export const ORCA_TRANSPORT_ID = "orca";
 
@@ -120,5 +121,6 @@ export const browserTransport: BrowserTransportFactory = {
     "Driving a tab of the Orca built-in browser in the isolated \"AI Content Factory\" profile. " +
     "It carries only the sessions you signed in to by hand in that profile; NodeTool never reads its cookies. " +
     "No raw CDP: response bodies, streamed console events and download paths are unavailable.",
-  open: () => openOrcaSession()
+  open: () => openOrcaSession(),
+  openProviderTab: (spec) => openOrcaProviderTab(spec)
 };

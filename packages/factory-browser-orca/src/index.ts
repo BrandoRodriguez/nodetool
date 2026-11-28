@@ -7,7 +7,8 @@
 
 export { browserTransport, openOrcaSession, orcaCapabilities, createOrcaCli, ORCA_TRANSPORT_ID } from "./transport.js";
 export { OrcaCli, spawnRunner, type OrcaRunner, type RunnerOptions, type RunnerResult } from "./orca-cli.js";
-export { OrcaPage, buildEvalExpression, decodeEvalResult } from "./orca-page.js";
+export { OrcaPage, assertNoCredentials, buildEvalExpression, decodeEvalResult } from "./orca-page.js";
+export { openOrcaProviderTab, parseProviderTabs } from "./provider-tab.js";
 export { OrcaPolicy, commandName, isInside } from "./policy.js";
 export { TabScope, type OrcaProfile, type OrcaTabInfo } from "./tab-scope.js";
 export { MediaCapture, retryAfterSeconds, type RateLimitGate } from "./media.js";
