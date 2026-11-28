@@ -119,6 +119,45 @@ factory_runtime_env
 npm run nodetool -- node run lib.browser.Screenshot --props '{"url":"https://example.com"}' --no-secrets
 ```
 
+## Renombrar la carpeta del proyecto (mismo proyecto de Orca)
+
+Orca registra un proyecto de carpeta por su ruta y su CLI no permite moverla:
+`orca project setup-update --path` pide reimportar el proyecto, y
+`orca project setup-existing-folder` rechaza la reimportación porque la
+identidad no coincide. **No añadas la carpeta nueva como otro proyecto**: se
+perderían las sesiones, el perfil asignado y las pestañas del original.
+
+Para conservar el mismo proyecto tras renombrar la carpeta raíz (por ejemplo
+`AI Content Factory` → `ai`):
+
+1. Deja un enlace simbólico con el nombre anterior que apunte al nuevo, junto a
+   la carpeta:
+
+   ```bash
+   cd <carpeta que contiene la raíz>
+   ln -s ai "AI Content Factory"
+   ```
+
+   El proyecto de Orca sigue apuntando a la ruta anterior, que ahora resuelve a
+   la carpeta renombrada. No se tocan archivos internos de Orca.
+2. No hace falta configurar nada en NodeTool: dentro de una terminal de Orca,
+   `dev-env.sh` usa el espacio que Orca exporta en `ORCA_WORKTREE_ID` si su
+   carpeta resuelve a la raíz del proyecto, y si no `path:<carpeta raíz>`.
+   `FACTORY_ORCA_WORKTREE` sigue permitiendo fijarlo a mano.
+3. La base de datos aislada guarda la ruta absoluta del espacio de trabajo por
+   defecto. Con los servidores parados, haz una copia y actualízala:
+
+   ```bash
+   DB=nodetool-dev-env/home/.local/share/nodetool/nodetool.sqlite3
+   cp -p "$DB" nodetool-dev-env/backups/nodetool.sqlite3.before-path-fix
+   sqlite3 "$DB" "update nodetool_workspaces set path=replace(path,'/ruta/anterior/','/ruta/nueva/');"
+   ```
+
+   Sin este paso el backend vuelve a crear la ruta anterior para guardar el
+   índice de assets.
+4. El enlace de `TMPDIR` (`/tmp/nodetool-factory-<uid>`) se repara solo al
+   arrancar.
+
 ## Logs
 
 | Archivo | Contenido |
