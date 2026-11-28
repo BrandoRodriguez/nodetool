@@ -107,7 +107,7 @@ Cada comando es una llamada al CLI (unos 120 ms una lectura, 300 ms una acción)
 
 | Variable | Por defecto | Uso |
 |---|---|---|
-| `FACTORY_ORCA_WORKTREE` | `path:<carpeta raíz>` en `dev-env.sh` | Espacio de Orca de la carpeta raíz del proyecto |
+| `FACTORY_ORCA_WORKTREE` | `dev-env.sh`: el espacio de `ORCA_WORKTREE_ID` si su carpeta resuelve a la raíz del proyecto; si no, `path:<carpeta raíz>` | Espacio de Orca de la carpeta raíz del proyecto |
 | `FACTORY_ORCA_PROFILE_LABEL` / `FACTORY_ORCA_PROFILE_ID` | `AI Content Factory` | Perfil aislado |
 | `FACTORY_ORCA_AUTHORIZED_PAGES` | vacío | Pestañas existentes autorizadas (browserPageId, separadas por comas) |
 | `FACTORY_ORCA_PAGE_ID` | vacío | Reutilizar una pestaña autorizada en vez de abrir una |
