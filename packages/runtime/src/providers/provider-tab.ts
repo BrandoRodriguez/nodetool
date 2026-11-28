@@ -43,8 +43,14 @@ type Opened = Awaited<ReturnType<NonNullable<import("@nodetool-ai/browser").Brow
  * in flight while it runs.
  */
 export function resolveProviderTab(opts: ResolveProviderTabOptions): ExtensionTab & { focus?(): Promise<void> } {
-  let openedKey = "";
-  let opened: Promise<Opened> | null = null;
+  /** One opened transport tab and the calls still using it. */
+  interface Entry {
+    key: string;
+    tab: Promise<Opened>;
+    users: number;
+    retired: boolean;
+  }
+  let entry: Entry | null = null;
   let extension: ExtensionTab | null = null;
 
   const configKey = (): { transport: string; key: string; env: NodeJS.ProcessEnv } => {
@@ -53,27 +59,33 @@ export function resolveProviderTab(opts: ResolveProviderTabOptions): ExtensionTa
     return { transport, env, key: `${transport}|${env["FACTORY_ORCA_PROVIDER_TABS"] ?? ""}` };
   };
 
-  const transportTab = (): Promise<Opened> => {
-    const { transport, key, env } = configKey();
-    if (opened && openedKey === key) return opened;
-    const previous = opened;
-    openedKey = key;
-    opened = (async () => {
-      if (previous) await previous.then((tab) => tab.release?.()).catch(() => undefined);
-      const { loadBrowserTransport } = await import("@nodetool-ai/browser");
-      const factory = await loadBrowserTransport(transport, env);
-      if (!factory.openProviderTab) {
-        throw new Error(
-          `Browser transport "${transport}" cannot open provider tabs. Use the extension transport, or do this step by hand in ${opts.host}.`
-        );
-      }
-      return factory.openProviderTab({ providerId: opts.providerId, host: opts.host, automated: opts.automated });
-    })().catch((error: unknown) => {
+  /** Release a replaced tab once the last call using it has finished. */
+  const retire = (old: Entry): void => {
+    old.retired = true;
+    if (old.users === 0) void old.tab.then((tab) => tab.release?.()).catch(() => undefined);
+  };
+
+  const open = (transport: string, key: string, env: NodeJS.ProcessEnv): Entry => {
+    const next: Entry = {
+      key,
+      users: 0,
+      retired: false,
+      tab: (async () => {
+        const { loadBrowserTransport } = await import("@nodetool-ai/browser");
+        const factory = await loadBrowserTransport(transport, env);
+        if (!factory.openProviderTab) {
+          throw new Error(
+            `Browser transport "${transport}" cannot open provider tabs. Use the extension transport, or do this step by hand in ${opts.host}.`
+          );
+        }
+        return factory.openProviderTab({ providerId: opts.providerId, host: opts.host, automated: opts.automated });
+      })()
+    };
+    next.tab.catch(() => {
       // A failed open is retried on the next call instead of cached.
-      opened = null;
-      throw error;
+      if (entry === next) entry = null;
     });
-    return opened;
+    return next;
   };
 
   type AnyTab = Pick<ExtensionTab, "evaluate" | "navigate"> & {
@@ -81,37 +93,52 @@ export function resolveProviderTab(opts: ResolveProviderTabOptions): ExtensionTa
     focus?(): Promise<void>;
     release?(): Promise<void>;
   };
-  const tab = async (): Promise<AnyTab> => {
-    if (configKey().transport === "extension") return (extension ??= createExtensionTab(opts.host));
-    return transportTab();
-  };
 
-  const tracked = async <T>(run: () => Promise<T>): Promise<T> => {
+  /**
+   * Run `use` on the tab the configuration names now. The tab is pinned for
+   * the whole call: a configuration change meanwhile affects the next call,
+   * and the replaced tab is released only after this one ends.
+   */
+  const withTab = async <T>(use: (tab: AnyTab) => Promise<T>): Promise<T> => {
     const end = beginBrowserOperation();
     try {
-      return await run();
+      const { transport, key, env } = configKey();
+      if (transport === "extension") return await use((extension ??= createExtensionTab(opts.host)));
+      if (!entry || entry.key !== key) {
+        if (entry) retire(entry);
+        entry = open(transport, key, env);
+      }
+      const pinned = entry;
+      pinned.users += 1;
+      try {
+        return await use(await pinned.tab);
+      } finally {
+        pinned.users -= 1;
+        if (pinned.retired && pinned.users === 0) {
+          void pinned.tab.then((tab) => tab.release?.()).catch(() => undefined);
+        }
+      }
     } finally {
       end();
     }
   };
 
   return {
-    evaluate: (expression, timeoutMs, signal) => tracked(async () => (await tab()).evaluate(expression, timeoutMs, signal)),
-    navigate: (url, signal) => tracked(async () => (await tab()).navigate(url, signal)),
+    evaluate: (expression, timeoutMs, signal) => withTab((tab) => tab.evaluate(expression, timeoutMs, signal)),
+    navigate: (url, signal) => withTab((tab) => tab.navigate(url, signal)),
     download: async (url, timeoutMs, signal) => {
       const { transport } = configKey();
-      if (transport === "extension") return tracked(async () => (extension ??= createExtensionTab(opts.host)).download(url, timeoutMs, signal));
+      if (transport === "extension") {
+        return withTab(async () => (extension ??= createExtensionTab(opts.host)).download(url, timeoutMs, signal));
+      }
       throw new Error(
         `Browser transport "${transport}" cannot load files with the browser's cookies. Download the file from ${opts.host} by hand.`
       );
     },
-    focus: async () => {
-      const current = await tab();
-      await current.focus?.();
-    },
+    focus: () => withTab(async (tab) => tab.focus?.()),
     release: async () => {
-      if (!opened) return;
-      const current = await opened.catch(() => null);
+      if (!entry) return;
+      const current = await entry.tab.catch(() => null);
       await current?.release?.();
     }
   };

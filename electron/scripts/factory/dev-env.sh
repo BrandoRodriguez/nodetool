@@ -153,5 +153,7 @@ factory_runtime_env() {
   # the user instead of sending anything. FACTORY_ORCA_PROVIDER_TABS names the
   # tab each provider may use (providerId=browserPageId).
   export NODETOOL_BROWSER_PROVIDER_POLICY="${NODETOOL_BROWSER_PROVIDER_POLICY:-terms}"
+  # Provider Manager: saved transport/tabs and paid media off by default.
+  export NODETOOL_PROVIDER_MANAGER="${NODETOOL_PROVIDER_MANAGER:-1}"
   export ELECTRON_ENABLE_LOGGING=1
 }

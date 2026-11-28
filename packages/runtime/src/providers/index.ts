@@ -283,6 +283,16 @@ export {
   assertGenerationAllowed,
   PaidProviderDisabledError
 } from "./provider-policy.js";
+export {
+  FACTORY_PROVIDER_SETTING_KEY,
+  applyFactoryProviderConfig,
+  applySavedFactoryProviderConfig,
+  currentFactoryProviderConfig,
+  factoryProviderConfigSchema,
+  parseFactoryProviderConfig,
+  providerManagerEnabled,
+  type FactoryProviderConfig
+} from "./factory-provider-config.js";
 export { GeminiWebProvider, setGeminiWebTab } from "./gemini-web-provider.js";
 export { GoogleFlowProvider, setGoogleFlowTab } from "./google-flow-provider.js";
 export { GOOGLE_FLOW_IMAGE_MODELS, GOOGLE_FLOW_VIDEO_MODELS } from "./google-flow-models.js";

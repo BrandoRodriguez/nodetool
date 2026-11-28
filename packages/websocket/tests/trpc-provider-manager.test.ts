@@ -72,6 +72,7 @@ beforeEach(() => {
   cloud.on = false;
   vi.stubEnv("FACTORY_ORCA_WORKTREE", "path:/factory");
   vi.stubEnv("NODETOOL_BROWSER_PROVIDER_POLICY", "terms");
+  vi.stubEnv("NODETOOL_PROVIDER_MANAGER", "1");
   applyFactoryProviderConfig(parseFactoryProviderConfig(null));
 });
 
@@ -197,6 +198,44 @@ describe("providerManager router", () => {
     expect(paidMediaPolicy()).toEqual(new Set(["openai"]));
     await caller.providerManager.setPaidMedia({ provider: "openai", enabled: false });
     expect(paidMediaPolicy()).toEqual(new Set());
+  });
+
+  it("is refused outside the AI Content Factory environment, and installs nothing there", async () => {
+    vi.stubEnv("NODETOOL_PROVIDER_MANAGER", "");
+    clearPaidMediaPolicy();
+    await expect(caller.providerManager.overview()).rejects.toMatchObject({ code: "PRECONDITION_FAILED" });
+    await loadFactoryProviderConfig(USER);
+    expect(paidMediaPolicy()).toBeNull();
+  });
+
+  it("applies concurrent changes one after another, losing none", async () => {
+    await Promise.all([
+      caller.providerManager.setPaidMedia({ provider: "openai", enabled: true }),
+      caller.providerManager.setPaidMedia({ provider: "gemini", enabled: true }),
+      caller.providerManager.setTransport({ transport: "extension" })
+    ]);
+    const row = await Setting.find(USER, FACTORY_PROVIDER_SETTING_KEY);
+    expect(JSON.parse(row!.value)).toMatchObject({ transport: "extension", paidMediaEnabled: ["gemini", "openai"] });
+  });
+
+  it("refuses a tab change when browser work starts while it is being checked", async () => {
+    const orca = fakeOrca();
+    let end: (() => void) | null = null;
+    const status = orca.status!.bind(orca);
+    orca.status = async (tabs) => {
+      // A provider call starts while the tab is being verified.
+      end = beginBrowserOperation();
+      return status(tabs);
+    };
+    registerBrowserTransport(orca);
+    try {
+      await expect(caller.providerManager.authorizeTab({ provider: "chatgpt", pageId: "gpt-tab" })).rejects.toMatchObject({
+        code: "CONFLICT"
+      });
+      expect(getSavedBrowserConfig().providerTabs ?? {}).toEqual({});
+    } finally {
+      end?.();
+    }
   });
 
   it("is refused on the cloud profile", async () => {

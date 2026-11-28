@@ -160,6 +160,14 @@ async function initSecretStore(): Promise<void> {
   } catch {
     // No DB available — rely on process.env for the provider key.
   }
+  // Inside AI Content Factory, the saved Provider Manager configuration
+  // applies here too: paid media stays off until a provider is turned on.
+  // A database that cannot be read keeps it off.
+  const { applySavedFactoryProviderConfig, FACTORY_PROVIDER_SETTING_KEY } = await import("@nodetool-ai/runtime");
+  await applySavedFactoryProviderConfig(async () => {
+    const { Setting } = await import("@nodetool-ai/models");
+    return (await Setting.find("1", FACTORY_PROVIDER_SETTING_KEY))?.value;
+  });
 }
 
 export function registerGenerateCommand(program: Command): void {

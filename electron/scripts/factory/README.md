@@ -158,6 +158,51 @@ Para conservar el mismo proyecto tras renombrar la carpeta raíz (por ejemplo
 4. El enlace de `TMPDIR` (`/tmp/nodetool-factory-<uid>`) se repara solo al
    arrancar.
 
+## Provider Manager
+
+Página **Proveedores** (también desde Ajustes → Modelos y proveedores). Solo está activa
+en este entorno: `dev-env.sh` exporta `NODETOOL_PROVIDER_MANAGER=1`. Sin esa
+variable, el servidor y la CLI se comportan como NodeTool original.
+
+- **Una sola configuración**: la fila `FACTORY_PROVIDER_MANAGER` de `nodetool_settings`
+  en la base aislada. Guarda el transporte, la pestaña autorizada de cada proveedor y
+  los proveedores de pago activados. El servidor (al arrancar) y la CLI
+  (`nodetool run`, `nodetool generate`) la aplican con la misma función del runtime,
+  y agentes, storyboard y workflows la leen a través de `@nodetool-ai/browser`. Lo
+  guardado tiene prioridad sobre las variables de entorno.
+- **Multimedia de pago desactivada por defecto**: imagen, vídeo y audio con API
+  oficiales se rechazan en el envoltorio de generación del runtime, antes de enviar
+  o registrar nada, hasta activar cada proveedor. El texto no se bloquea.
+- **Política `terms`**: sigue activa. Gemini, Google Flow y Dreamina se rechazan
+  mientras sus términos no estén revisados; Muse.ai figura como planificado.
+- **Sin carreras**: los cambios de configuración se aplican de uno en uno, se
+  rechazan mientras hay trabajo del navegador en curso (se comprueba otra vez justo
+  antes de guardar) y cada llamada a un proveedor fija su pestaña hasta terminar; la
+  pestaña sustituida se libera cuando acaba la última llamada que la usaba.
+
+### Limitaciones
+
+- La sesión de un sitio (ChatGPT…) nunca se verifica: haría falta leer la página.
+- Los proveedores de API por cuenta (Copilot, Antigravity, Claude Agent SDK) se
+  muestran como «cuenta sin verificar».
+- Solo ChatGPT puede usar pestañas de Orca; Gemini, Flow y Dreamina solo la extensión
+  (y están bloqueados con `terms`).
+- Fuera de `nodetool run` y `nodetool generate` (por ejemplo el servidor MCP por
+  stdio de `cli-mcp`), la configuración no se aplica todavía.
+- Entre la última comprobación y el guardado hay una espera breve (escritura en la
+  base): una llamada que empiece justo ahí usa la configuración anterior y termina en
+  su pestaña; la siguiente ya usa la nueva.
+- Los textos solo están traducidos a inglés y español; el resto de idiomas muestra
+  el inglés.
+
+### Fallos de prueba preexistentes (también fallan en `factory/develop`)
+
+| Paquete | Pruebas | Causa |
+|---|---|---|
+| `browser` | `bridge-socket-ownership` (2) | `TMPDIR` enlazado del entorno aislado |
+| `runtime` | `wan2gp-models`, `wan2gp-server` (2) | Wan2GP no instalado |
+| `websocket` | `example-*`, `generation-autosave-cutover`, `job-stream-failure-bookkeeping`, `project-assets`, `project-index` (22) | medios de ejemplo sin descargar (`npm run media:pull`), límites de tiempo y rutas del `TMPDIR` enlazado |
+
 ## Logs
 
 | Archivo | Contenido |

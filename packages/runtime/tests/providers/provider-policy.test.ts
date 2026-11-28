@@ -214,3 +214,76 @@ describe("resolveProviderTab follows configuration changes", () => {
     }
   });
 });
+
+describe("configuration changes during active operations", () => {
+  it("keeps an in-flight call on its tab and releases that tab only when the call ends", async () => {
+    const released: string[] = [];
+    const holds = new Map<string, () => void>();
+    registerBrowserTransport({
+      id: "orca",
+      describe: () => "fake orca",
+      open: async () => {
+        throw new Error("not used");
+      },
+      openProviderTab: async () => {
+        const label = process.env["__unused__"] ?? `tab-${holds.size + released.length}`;
+        return {
+          evaluate: (expression: string) =>
+            new Promise((resolve) => holds.set(`${label}:${expression}`, () => resolve(`${label}:${expression}`))),
+          navigate: async () => undefined,
+          release: async () => {
+            released.push(label);
+          }
+        };
+      }
+    });
+    try {
+      setSavedBrowserConfig({ transport: "orca", providerTabs: { chatgpt: "a" } });
+      const tab = resolveProviderTab({ providerId: "chatgpt", host: "chatgpt.com", automated: false, env: {} });
+      const first = tab.evaluate("first");
+      await vi.waitFor(() => expect(holds.has("tab-0:first")).toBe(true));
+
+      // The authorized tab changes while the first call is still running.
+      setSavedBrowserConfig({ transport: "orca", providerTabs: { chatgpt: "b" } });
+      const second = tab.evaluate("second");
+      await vi.waitFor(() => expect([...holds.keys()].some((k) => k.endsWith(":second"))).toBe(true));
+      const secondKey = [...holds.keys()].find((k) => k.endsWith(":second"))!;
+      expect(secondKey.startsWith("tab-0")).toBe(false);
+      // The old tab is still in use: not released yet.
+      expect(released).toEqual([]);
+
+      holds.get(secondKey)!();
+      await second;
+      expect(released).toEqual([]);
+      holds.get("tab-0:first")!();
+      await expect(first).resolves.toBe("tab-0:first");
+      await vi.waitFor(() => expect(released).toEqual(["tab-0"]));
+    } finally {
+      unregisterBrowserTransport("orca");
+    }
+  });
+});
+
+describe("the shared saved configuration", () => {
+  it("is applied only inside the AI Content Factory environment", async () => {
+    const { applySavedFactoryProviderConfig } = await import("../../src/providers/factory-provider-config.js");
+    const { paidMediaPolicy } = await import("../../src/providers/provider-policy.js");
+    const row = JSON.stringify({ transport: "orca", providerTabs: { chatgpt: "t" }, paidMediaEnabled: ["openai"] });
+
+    await expect(applySavedFactoryProviderConfig(async () => row, {})).resolves.toBe(false);
+    expect(paidMediaPolicy()).toBeNull();
+
+    await expect(applySavedFactoryProviderConfig(async () => row, { NODETOOL_PROVIDER_MANAGER: "1" })).resolves.toBe(true);
+    expect(paidMediaPolicy()).toEqual(new Set(["openai"]));
+    expect(configuredProviderTransport({})).toBe("orca");
+  });
+
+  it("keeps paid media off when the saved row cannot be read", async () => {
+    const { applySavedFactoryProviderConfig } = await import("../../src/providers/factory-provider-config.js");
+    const { paidMediaPolicy } = await import("../../src/providers/provider-policy.js");
+    await applySavedFactoryProviderConfig(async () => {
+      throw new Error("database locked");
+    }, { NODETOOL_PROVIDER_MANAGER: "1" });
+    expect(paidMediaPolicy()).toEqual(new Set());
+  });
+});

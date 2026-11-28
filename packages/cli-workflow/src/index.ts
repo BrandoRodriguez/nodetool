@@ -16,8 +16,13 @@ import {
   Workflow,
   Asset,
   Secret,
+  Setting,
   getSecret
 } from "@nodetool-ai/models";
+import {
+  FACTORY_PROVIDER_SETTING_KEY,
+  applySavedFactoryProviderConfig
+} from "@nodetool-ai/runtime";
 import { initMasterKey, isKeychainBackendMissing } from "@nodetool-ai/security";
 import { registerExamplesCommand } from "./commands/examples.js";
 import { getDefaultDbPath, getDefaultAssetsPath } from "@nodetool-ai/config";
@@ -118,12 +123,24 @@ export async function createProgram(): Promise<CommanderCommand> {
     // later columns (nodetool_assets.favorite) until migrated.
     await migrateSqliteDb(dbPath);
     initDb(dbPath);
+    await applyProviderManagerConfig();
+  }
+
+  // Inside the AI Content Factory environment, workflows run here follow the
+  // same saved Provider Manager configuration as the server: the browser
+  // transport and tabs, and paid media off until a provider is turned on.
+  // Elsewhere this does nothing.
+  async function applyProviderManagerConfig(): Promise<void> {
+    await applySavedFactoryProviderConfig(
+      async () => (await Setting.find(LOCAL_USER_ID, FACTORY_PROVIDER_SETTING_KEY))?.value
+    );
   }
 
   async function setupDb(): Promise<void> {
     const dbPath = getDefaultDbPath();
     await migrateSqliteDb(dbPath);
     initDb(dbPath);
+    await applyProviderManagerConfig();
     // Resolve the master encryption key from keychain / env / AWS so that
     // both encryption (Secret.upsert) and decryption (Secret.getDecryptedValue)
     // use the same persistent key. Without this, a fresh process would

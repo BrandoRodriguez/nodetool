@@ -46,6 +46,7 @@ import { getSecret as getStoredSecret } from "@nodetool-ai/models";
 import { isCloudProfile } from "../../lib/cloud-profile.js";
 import {
   currentFactoryProviderConfig,
+  providerManagerEnabled,
   saveFactoryProviderConfig,
   type FactoryProviderConfig
 } from "../../lib/factory-provider-config.js";
@@ -61,6 +62,12 @@ function localOnly(): void {
   if (isCloudProfile()) {
     throw new TRPCError({ code: "FORBIDDEN", message: "The Provider Manager runs on your own computer only" });
   }
+  if (!providerManagerEnabled()) {
+    throw new TRPCError({
+      code: "PRECONDITION_FAILED",
+      message: "The Provider Manager runs inside the AI Content Factory environment (NODETOOL_PROVIDER_MANAGER=1)."
+    });
+  }
 }
 
 function refuseWhileBusy(action: string): void {
@@ -74,6 +81,19 @@ function refuseWhileBusy(action: string): void {
         "Wait for it to finish, then try again."
     });
   }
+}
+
+let configChain: Promise<unknown> = Promise.resolve();
+
+/**
+ * Configuration changes run one at a time: each reads the configuration
+ * after the previous one saved, so concurrent changes never overwrite each
+ * other.
+ */
+function withConfigLock<T>(change: () => Promise<T>): Promise<T> {
+  const run = configChain.then(change, change);
+  configChain = run.catch(() => undefined);
+  return run;
 }
 
 /** Where the transport in effect comes from. */
@@ -353,13 +373,15 @@ export const providerManagerRouter = router({
     .output(z.object({ transport: transportId }))
     .mutation(async ({ ctx, input }) => {
       localOnly();
-      if (input.transport === "orca" && !orcaConfigured()) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Orca is not configured for this backend (FACTORY_ORCA_WORKTREE)." });
-      }
-      refuseWhileBusy("change the browser transport");
-      const config = currentFactoryProviderConfig();
-      await saveFactoryProviderConfig(ctx.userId, { ...config, transport: input.transport });
-      return { transport: input.transport };
+      return withConfigLock(async () => {
+        if (input.transport === "orca" && !orcaConfigured()) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Orca is not configured for this backend (FACTORY_ORCA_WORKTREE)." });
+        }
+        refuseWhileBusy("change the browser transport");
+        const config = currentFactoryProviderConfig();
+        await saveFactoryProviderConfig(ctx.userId, { ...config, transport: input.transport });
+        return { transport: input.transport };
+      });
     }),
 
   openSignInTab: protectedProcedure
@@ -367,28 +389,31 @@ export const providerManagerRouter = router({
     .output(z.object({ pageId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       localOnly();
-      const host = hostOf(input.provider);
-      const entry = factoryBrowserProvider(input.provider);
-      if (!entry?.transports.includes("orca")) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${entry?.name ?? input.provider} cannot use Orca tabs yet.` });
-      }
-      if (!orcaConfigured()) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Orca is not configured for this backend (FACTORY_ORCA_WORKTREE)." });
-      }
-      refuseWhileBusy("change a provider tab");
-      const factory = await loadBrowserTransport("orca", orcaEnv());
-      if (!factory.openSignInTab) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This Orca transport cannot open sign-in tabs." });
-      }
-      let pageId: string;
-      try {
-        pageId = await factory.openSignInTab(`https://${host}/`);
-      } catch (error) {
-        throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : String(error) });
-      }
-      const config = currentFactoryProviderConfig();
-      await saveFactoryProviderConfig(ctx.userId, { ...config, providerTabs: { ...config.providerTabs, [input.provider]: pageId } });
-      return { pageId };
+      return withConfigLock(async () => {
+        const host = hostOf(input.provider);
+        const entry = factoryBrowserProvider(input.provider);
+        if (!entry?.transports.includes("orca")) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: `${entry?.name ?? input.provider} cannot use Orca tabs yet.` });
+        }
+        if (!orcaConfigured()) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "Orca is not configured for this backend (FACTORY_ORCA_WORKTREE)." });
+        }
+        refuseWhileBusy("change a provider tab");
+        const factory = await loadBrowserTransport("orca", orcaEnv());
+        if (!factory.openSignInTab) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: "This Orca transport cannot open sign-in tabs." });
+        }
+        let pageId: string;
+        try {
+          pageId = await factory.openSignInTab(`https://${host}/`);
+        } catch (error) {
+          throw new TRPCError({ code: "PRECONDITION_FAILED", message: error instanceof Error ? error.message : String(error) });
+        }
+        refuseWhileBusy("change a provider tab");
+        const config = currentFactoryProviderConfig();
+        await saveFactoryProviderConfig(ctx.userId, { ...config, providerTabs: { ...config.providerTabs, [input.provider]: pageId } });
+        return { pageId };
+      });
     }),
 
   authorizeTab: protectedProcedure
@@ -396,22 +421,25 @@ export const providerManagerRouter = router({
     .output(z.object({ pageId: z.string() }))
     .mutation(async ({ ctx, input }) => {
       localOnly();
-      const host = hostOf(input.provider);
-      refuseWhileBusy("change a provider tab");
-      const checked = await orcaStatus({ [input.provider]: { pageId: input.pageId, host } });
-      const tab = checked.tabs[input.provider];
-      if (!tab?.exists || !tab.onHost) {
-        throw new TRPCError({
-          code: "PRECONDITION_FAILED",
-          message: tab?.detail ?? checked.detail ?? `Tab ${input.pageId} is not in the factory profile on ${host}.`
+      return withConfigLock(async () => {
+        const host = hostOf(input.provider);
+        refuseWhileBusy("change a provider tab");
+        const checked = await orcaStatus({ [input.provider]: { pageId: input.pageId, host } });
+        const tab = checked.tabs[input.provider];
+        if (!tab?.exists || !tab.onHost) {
+          throw new TRPCError({
+            code: "PRECONDITION_FAILED",
+            message: tab?.detail ?? checked.detail ?? `Tab ${input.pageId} is not in the factory profile on ${host}.`
+          });
+        }
+        refuseWhileBusy("change a provider tab");
+        const config = currentFactoryProviderConfig();
+        await saveFactoryProviderConfig(ctx.userId, {
+          ...config,
+          providerTabs: { ...config.providerTabs, [input.provider]: input.pageId }
         });
-      }
-      const config = currentFactoryProviderConfig();
-      await saveFactoryProviderConfig(ctx.userId, {
-        ...config,
-        providerTabs: { ...config.providerTabs, [input.provider]: input.pageId }
+        return { pageId: input.pageId };
       });
-      return { pageId: input.pageId };
     }),
 
   revokeTab: protectedProcedure
@@ -419,12 +447,14 @@ export const providerManagerRouter = router({
     .output(z.object({ ok: z.literal(true) }))
     .mutation(async ({ ctx, input }) => {
       localOnly();
-      refuseWhileBusy("change a provider tab");
-      const config = currentFactoryProviderConfig();
-      const providerTabs = { ...config.providerTabs };
-      delete providerTabs[input.provider];
-      await saveFactoryProviderConfig(ctx.userId, { ...config, providerTabs });
-      return { ok: true as const };
+      return withConfigLock(async () => {
+        refuseWhileBusy("change a provider tab");
+        const config = currentFactoryProviderConfig();
+        const providerTabs = { ...config.providerTabs };
+        delete providerTabs[input.provider];
+        await saveFactoryProviderConfig(ctx.userId, { ...config, providerTabs });
+        return { ok: true as const };
+      });
     }),
 
   setPaidMedia: protectedProcedure
@@ -432,14 +462,16 @@ export const providerManagerRouter = router({
     .output(z.object({ paidMediaEnabled: z.array(z.string()) }))
     .mutation(async ({ ctx, input }) => {
       localOnly();
-      if (providerAccessMode(input.provider) !== "api" || !getRegisteredProvider(input.provider)) {
-        throw new TRPCError({ code: "BAD_REQUEST", message: `${input.provider} is not a paid API provider.` });
-      }
-      const config = currentFactoryProviderConfig();
-      const enabled = new Set(config.paidMediaEnabled);
-      if (input.enabled) enabled.add(input.provider);
-      else enabled.delete(input.provider);
-      const saved = await saveFactoryProviderConfig(ctx.userId, { ...config, paidMediaEnabled: [...enabled].sort() });
-      return { paidMediaEnabled: saved.paidMediaEnabled };
+      return withConfigLock(async () => {
+        if (providerAccessMode(input.provider) !== "api" || !getRegisteredProvider(input.provider)) {
+          throw new TRPCError({ code: "BAD_REQUEST", message: `${input.provider} is not a paid API provider.` });
+        }
+        const config = currentFactoryProviderConfig();
+        const enabled = new Set(config.paidMediaEnabled);
+        if (input.enabled) enabled.add(input.provider);
+        else enabled.delete(input.provider);
+        const saved = await saveFactoryProviderConfig(ctx.userId, { ...config, paidMediaEnabled: [...enabled].sort() });
+        return { paidMediaEnabled: saved.paidMediaEnabled };
+      });
     })
 });

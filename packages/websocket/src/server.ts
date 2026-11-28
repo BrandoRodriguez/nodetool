@@ -135,11 +135,7 @@ import {
   purgeDueDeletedDocuments
 } from "./lib/deleted-documents.js";
 import { isCloudProfile } from "./lib/cloud-profile.js";
-import {
-  applyFactoryProviderConfig,
-  loadFactoryProviderConfig,
-  parseFactoryProviderConfig
-} from "./lib/factory-provider-config.js";
+import { loadFactoryProviderConfig, providerManagerEnabled } from "./lib/factory-provider-config.js";
 import {
   applyHfEndpointSetting,
   applyTransformersJsCacheSetting,
@@ -475,21 +471,15 @@ try {
   }
 
   // AI Content Factory Provider Manager: the saved browser transport, provider
-  // tabs and paid-media choices. Paid media stays off until turned on, even
-  // when nothing is saved. The cloud keeps the operator's environment.
-  if (!isCloudProfile()) {
-    try {
-      const factoryConfig = await loadFactoryProviderConfig(LOCAL_USER_ID);
-      log.info("Provider Manager configuration applied", {
-        transport: factoryConfig.transport ?? "(environment)",
-        paidMediaEnabled: factoryConfig.paidMediaEnabled.length
-      });
-    } catch (err) {
-      applyFactoryProviderConfig(parseFactoryProviderConfig(null));
-      log.warn("Could not read the Provider Manager configuration; paid media stays off", {
-        error: err instanceof Error ? err.message : String(err)
-      });
-    }
+  // tabs and paid-media choices. Only inside the factory environment
+  // (NODETOOL_PROVIDER_MANAGER=1); paid media stays off there until turned
+  // on, even when nothing is saved. Elsewhere NodeTool behaves as upstream.
+  if (!isCloudProfile() && providerManagerEnabled()) {
+    const factoryConfig = await loadFactoryProviderConfig(LOCAL_USER_ID);
+    log.info("Provider Manager configuration applied", {
+      transport: factoryConfig.transport ?? "(environment)",
+      paidMediaEnabled: factoryConfig.paidMediaEnabled.length
+    });
   }
 
   // Bookkeeping for media generations: close the rows a restart orphaned, and
