@@ -438,7 +438,7 @@ const partialMatches: ReadonlyArray<readonly [string, string]> = Object.entries(
   nvidia: nvidiaColorIcon,
 });
 
-const getProviderIconUrl = (provider: string): string | null => {
+export const getProviderIconUrl = (provider: string): string | null => {
   if (!provider) {
     return null;
   }

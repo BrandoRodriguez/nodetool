@@ -50,6 +50,7 @@ import type {
   GenerationHost
 } from "./context-host.js";
 import { dispatchCapability } from "./provider-dispatch.js";
+import { assertGenerationAllowed } from "../providers/provider-policy.js";
 
 export type PredictionStatus =
   | "pending"
@@ -231,6 +232,8 @@ export async function runGenerationWith<T>(
   let durableAccepted = false;
   let terminalAttempted = false;
   try {
+    // Terms and paid-media admission: before anything is recorded or sent.
+    assertGenerationAllowed({ provider: req.provider, capability: String(req.capability) });
     const accepted = await accept?.({ generationId: id, request: req });
     if (accepted?.skipProvider) {
       throw new GenerationAlreadyAcceptedError(

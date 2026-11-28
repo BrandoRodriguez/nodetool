@@ -17,6 +17,9 @@ const CollectionsExplorer = React.lazy(
   () => import("../collections/CollectionsExplorer")
 );
 const SettingsPage = React.lazy(() => import("../menus/SettingsMenu"));
+const ProviderManagerPage = React.lazy(
+  () => import("../provider_manager/ProviderManagerPage")
+);
 const EntityLibrary = React.lazy(() => import("../entities/EntityLibrary"));
 const LipsyncStudio = React.lazy(() => import("../lipsync/LipsyncStudio"));
 const EffectsGallery = React.lazy(() => import("../effects/EffectsGallery"));
@@ -29,6 +32,7 @@ const PAGE_COMPONENTS = {
   examples: ExamplesPage,
   costs: CostsDashboard,
   models: ModelsPage,
+  providers: ProviderManagerPage,
   packages: PackagesPage,
   collections: CollectionsExplorer,
   entities: EntityLibrary,
@@ -69,7 +73,8 @@ const SELF_SCROLLING_PAGES = new Set<PageTabKey>([
 // session says so instead of rendering controls that cannot work.
 export const LOCAL_ONLY_PAGES: ReadonlySet<PageTabKey> = new Set<PageTabKey>([
   "models",
-  "packages"
+  "packages",
+  "providers"
 ]);
 
 interface PageSurfaceProps {

@@ -58,6 +58,7 @@ import { adminRouter } from "./routers/admin.js";
 import { workerRouter } from "./routers/worker.js";
 import { workflowsRouter } from "./routers/workflows.js";
 import { workspaceRouter } from "./routers/workspace.js";
+import { providerManagerRouter } from "./routers/provider-manager.js";
 
 const healthzProcedure = publicProcedure.output(z.object({ ok: z.literal(true) })).query(() => ({ ok: true as const }));
 type AppRouterRecord = {
@@ -75,6 +76,7 @@ type AppRouterRecord = {
   documentSharing: typeof documentSharingRouter;
   externalMcp: typeof externalMcpRouter;
   extension: typeof extensionRouter;
+  providerManager: typeof providerManagerRouter;
   files: typeof filesRouter;
   fonts: typeof fontsRouter;
   games: typeof gamesRouter;
@@ -137,6 +139,7 @@ export const appRouter: ReturnType<typeof router<AppRouterRecord>> = router({
   documentSharing: documentSharingRouter,
   externalMcp: externalMcpRouter,
   extension: extensionRouter,
+  providerManager: providerManagerRouter,
   files: filesRouter,
   fonts: fontsRouter,
   games: gamesRouter,

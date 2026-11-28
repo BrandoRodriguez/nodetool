@@ -271,8 +271,18 @@ export {
   ProviderRateLimitedError,
   automationAllowed,
   enforceProviderTerms,
-  providerAccessMode
+  providerAccessMode,
+  ProviderTermsUnreviewedError,
+  assertBrowserProviderAllowed
 } from "./browser-provider-terms.js";
+export {
+  installPaidMediaPolicy,
+  clearPaidMediaPolicy,
+  paidMediaPolicy,
+  isPaidProvider,
+  assertGenerationAllowed,
+  PaidProviderDisabledError
+} from "./provider-policy.js";
 export { GeminiWebProvider, setGeminiWebTab } from "./gemini-web-provider.js";
 export { GoogleFlowProvider, setGoogleFlowTab } from "./google-flow-provider.js";
 export { GOOGLE_FLOW_IMAGE_MODELS, GOOGLE_FLOW_VIDEO_MODELS } from "./google-flow-models.js";

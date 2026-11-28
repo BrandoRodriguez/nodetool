@@ -7,6 +7,7 @@ export type PageTabKey =
   | "examples"
   | "costs"
   | "models"
+  | "providers"
   | "packages"
   | "collections"
   | "entities"
@@ -22,6 +23,7 @@ export const PAGE_TAB_TITLES = {
   examples: "Examples",
   costs: "Costs",
   models: "Model manager",
+  providers: "Providers",
   packages: "Package manager",
   collections: "Collections",
   entities: "Entities",

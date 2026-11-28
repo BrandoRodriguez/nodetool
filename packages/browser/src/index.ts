@@ -42,7 +42,8 @@ export {
   browserCaptureMedia,
   browserUploadAsset,
   browserStatus,
-  closeBrowserSession
+  closeBrowserSession,
+  hasOpenBrowserSession
 } from "./actions.js";
 
 export * from "./schemas.js";
@@ -63,8 +64,22 @@ export {
   type BrowserTransportSession,
   type BrowserTransportFactory,
   type ProviderTab,
-  type ProviderTabSpec
+  type ProviderTabSpec,
+  type BrowserTransportStatus
 } from "./transport-registry.js";
+
+export {
+  SELECTABLE_BROWSER_TRANSPORTS,
+  isSelectableBrowserTransport,
+  setSavedBrowserConfig,
+  getSavedBrowserConfig,
+  browserEnv,
+  effectiveBrowserTransport,
+  beginBrowserOperation,
+  activeBrowserOperations,
+  type SelectableBrowserTransport,
+  type SavedBrowserConfig
+} from "./browser-config.js";
 
 export { captureMediaInPage } from "./capture.js";
 export { uploadAssetToInput } from "./upload.js";

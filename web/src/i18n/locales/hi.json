@@ -16092,7 +16092,8 @@
         "settings": "सेटिंग्स",
         "effects": "प्रभाव",
         "lipsync": "लिप्सिन",
-        "admin": "प्रशासन"
+        "admin": "प्रशासन",
+        "providers": "Providers"
       }
     },
     "script": {
@@ -20889,6 +20890,137 @@
       "embedAgain": "फिर से एम्बेड करें",
       "rebuild": "इंडेक्स फिर से बनाएं",
       "providerHint": "किसी प्रोवाइडर का मॉडल इस्तेमाल करने के लिए ऊपर प्रोवाइडर और मॉडल सेट करें। उस प्रोवाइडर को भेजे गए अंश: {{count}}"
+    }
+  },
+  "providerManager": {
+    "title": "Providers",
+    "subtitle": "Browser transport, browser providers, official APIs and local models for AI Content Factory.",
+    "refresh": "Refresh status",
+    "loadFailed": "Could not load the providers",
+    "policy": {
+      "termsOn": "Provider terms policy on",
+      "termsOff": "Provider terms policy off",
+      "paidOff": "Paid media off",
+      "paidOn": "Paid media on for {{count}}"
+    },
+    "transport": {
+      "title": "Browser transport",
+      "source": {
+        "saved": "Saved in this app",
+        "environment": "From the environment (not saved yet)",
+        "default": "Default"
+      },
+      "option": {
+        "local": "Local",
+        "extension": "Extension",
+        "orca": "Orca"
+      },
+      "reason": {
+        "orca_not_configured": "Orca is not set up for this backend (FACTORY_ORCA_WORKTREE)."
+      },
+      "help": {
+        "local": "Agents browse in a local browser with no signed-in sessions. Browser providers use the NodeTool extension tab.",
+        "extension": "Agents and browser providers use your Chrome through the NodeTool extension.",
+        "orca": "Agents and providers use tabs of the isolated \"AI Content Factory\" profile in Orca's browser."
+      },
+      "busy_one": "Browser work is in progress ({{count}} operation). The transport can change once it ends.",
+      "busy_other": "Browser work is in progress ({{count}} operations). The transport can change once it ends."
+    },
+    "mode": {
+      "browser_assisted": "Assisted",
+      "browser_automated": "Automated",
+      "api": "Official API",
+      "local": "Local"
+    },
+    "reason": {
+      "planned": "Planned",
+      "terms_unreviewed": "Terms not reviewed",
+      "not_configured": "Not configured",
+      "transport_unsupported": "Not on this transport",
+      "paid_disabled": "Paid off",
+      "account_unverified": "Account not verified"
+    },
+    "reasonHelp": {
+      "planned": "Designed for, not built yet. Nothing is sent to this site.",
+      "terms_unreviewed": "Its terms have not been reviewed for automated use, so it is off while the terms policy is on.",
+      "not_configured": "Add what it needs (a key or a server) to use it.",
+      "transport_unsupported": "This provider cannot use tabs of the selected transport yet. Switch to Extension to use it.",
+      "paid_disabled": "Paid media generation is off for this provider.",
+      "account_unverified": "Sign in from Settings. This page does not check the sign-in."
+    },
+    "capability": {
+      "text": "Text",
+      "image": "Image",
+      "video": "Video",
+      "audio": "Audio",
+      "other": "Other capabilities (embeddings, 3D, upscaling…)",
+      "tbd": "Capabilities to be defined"
+    },
+    "status": {
+      "transport": "Transport",
+      "configured": "Configured",
+      "tab": "Tab",
+      "session": "Session",
+      "connected": "connected",
+      "disconnected": "not connected",
+      "yes": "yes",
+      "no": "no",
+      "tabByExtension": "open tab in Chrome",
+      "tabNone": "none authorized",
+      "tabReady": "authorized",
+      "tabMissing": "not found",
+      "unverifiable": "not verified (sign in by hand)"
+    },
+    "actions": {
+      "openSignInTab": "Open sign-in tab",
+      "newSignInTab": "New sign-in tab",
+      "showTab": "Show tab",
+      "revoke": "Remove",
+      "pageIdPlaceholder": "Orca tab id",
+      "authorize": "Authorize"
+    },
+    "sections": {
+      "browser": "Browser (assisted)",
+      "browserHelp": "Sites you use signed in. NodeTool prepares the prompt and you finish by hand.",
+      "api": "Official APIs",
+      "apiHelp": "Billed per call. Paid media generation stays off until you turn a provider on.",
+      "local": "Local models",
+      "localHelp": "Run on this machine. Models are managed in the Model manager."
+    },
+    "api": {
+      "keySaved": "Key saved",
+      "noKey": "No key",
+      "addKey": "Add key",
+      "paidMedia": "Paid media",
+      "configuredOnly": "Configured only",
+      "search": "Search providers",
+      "empty": "No providers match",
+      "confirmTitle": "Turn on paid media for {{provider}}?",
+      "confirmBody": "Image, video and audio generations with this provider may be billed by the provider. You can turn it off again here at any time.",
+      "confirm": "Turn on",
+      "cancel": "Cancel",
+      "account": "Account (not verified here)",
+      "manageAccount": "Manage account"
+    },
+    "local": {
+      "manage": "Manage models",
+      "configured": "ready",
+      "notConfigured": "not set up",
+      "ollama": {
+        "connected": "running",
+        "unreachable": "not running",
+        "unavailable": "not installed"
+      },
+      "install": {
+        "installed": "installed",
+        "missing": "not installed",
+        "installing": "installing"
+      }
+    },
+    "link": {
+      "title": "Provider Manager",
+      "body": "Transport, browser providers and authorized tabs, paid media and local models in one place.",
+      "open": "Open"
     }
   }
 }

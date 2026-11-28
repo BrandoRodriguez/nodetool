@@ -55,6 +55,7 @@ import {
   loadBrowserTransport,
   type BrowserTransportSession
 } from "./transport-registry.js";
+import { browserEnv } from "./browser-config.js";
 
 const log = createLogger("nodetool.browser");
 
@@ -147,7 +148,7 @@ let transportOverride: BrowserTransport | null = null;
  */
 function resolveTransport(): string {
   if (transportOverride) return transportOverride;
-  const configured = process.env.NODETOOL_BROWSER_TRANSPORT?.trim();
+  const configured = browserEnv().NODETOOL_BROWSER_TRANSPORT?.trim();
   if (configured === "extension") return "extension";
   if (!configured || configured === "local") return "local";
   return configured;
@@ -197,6 +198,11 @@ function hookShutdown(): void {
   process.once("SIGINT", onExit);
   process.once("SIGTERM", onExit);
   process.once("exit", onExit);
+}
+
+/** Whether the shared agent browser session is open (work in progress on it). */
+export function hasOpenBrowserSession(): boolean {
+  return state !== null;
 }
 
 async function ensureState(): Promise<BrowserState> {

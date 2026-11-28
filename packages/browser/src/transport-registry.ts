@@ -12,6 +12,7 @@
  */
 
 import type { BrowserPage } from "./browser-page.js";
+import { browserEnv } from "./browser-config.js";
 import type {
   BrowserCaptureMediaInput,
   BrowserCaptureMediaRaw
@@ -92,6 +93,24 @@ export interface BrowserTransportFactory {
   }): Promise<BrowserTransportSession>;
   /** A provider's signed-in tab. Absent when the transport cannot serve providers. */
   openProviderTab?(spec: ProviderTabSpec): Promise<ProviderTab>;
+  /**
+   * What the transport can say about itself right now, without touching any
+   * site: whether it is reachable, and for each provider tab given whether
+   * that tab exists on the provider's host. Absent when it cannot tell.
+   */
+  status?(providerTabs: Readonly<Record<string, { pageId: string; host: string }>>): Promise<BrowserTransportStatus>;
+  /**
+   * Open a new tab on `url` in the transport's own profile, for the user to
+   * sign in by hand. Answers the tab id to authorize for the provider.
+   */
+  openSignInTab?(url: string): Promise<string>;
+}
+
+export interface BrowserTransportStatus {
+  connected: boolean;
+  /** Why not, or what to check, when `connected` is false. */
+  detail?: string;
+  tabs: Record<string, { exists: boolean; onHost: boolean; detail?: string }>;
 }
 
 const registry = new Map<string, BrowserTransportFactory>();
@@ -146,7 +165,7 @@ function isTransportFactory(value: unknown): value is BrowserTransportFactory {
  */
 export async function loadBrowserTransport(
   id: string,
-  env: NodeJS.ProcessEnv = process.env
+  env: NodeJS.ProcessEnv = browserEnv()
 ): Promise<BrowserTransportFactory> {
   const registered = registry.get(id);
   if (registered) return registered;

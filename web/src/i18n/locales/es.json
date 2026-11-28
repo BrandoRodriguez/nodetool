@@ -16372,7 +16372,8 @@
         "settings": "Configuración",
         "effects": "Efectos",
         "lipsync": "sincronización de labios",
-        "admin": "Administración"
+        "admin": "Administración",
+        "providers": "Proveedores"
       }
     },
     "script": {
@@ -21208,6 +21209,138 @@
       "embedAgain": "Incrustar de nuevo",
       "rebuild": "Reconstruir el índice",
       "providerHint": "Para usar un modelo de un proveedor, indica el proveedor y el modelo arriba. Fragmentos enviados a ese proveedor: {{count}}"
+    }
+  },
+  "providerManager": {
+    "title": "Proveedores",
+    "subtitle": "Transporte del navegador, proveedores de navegador, API oficiales y modelos locales de AI Content Factory.",
+    "refresh": "Actualizar estado",
+    "loadFailed": "No se pudieron cargar los proveedores",
+    "policy": {
+      "termsOn": "Política de términos activa",
+      "termsOff": "Política de términos desactivada",
+      "paidOff": "Multimedia de pago desactivada",
+      "paidOn": "Multimedia de pago activa en {{count}}"
+    },
+    "transport": {
+      "title": "Transporte del navegador",
+      "source": {
+        "saved": "Guardado en esta app",
+        "environment": "Del entorno (aún sin guardar)",
+        "default": "Por defecto"
+      },
+      "option": {
+        "local": "Local",
+        "extension": "Extensión",
+        "orca": "Orca"
+      },
+      "reason": {
+        "orca_not_configured": "Orca no está configurado en este backend (FACTORY_ORCA_WORKTREE)."
+      },
+      "help": {
+        "local": "Los agentes navegan en un navegador local sin sesiones iniciadas. Los proveedores de navegador usan la pestaña de la extensión de NodeTool.",
+        "extension": "Agentes y proveedores de navegador usan tu Chrome a través de la extensión de NodeTool.",
+        "orca": "Agentes y proveedores usan pestañas del perfil aislado «AI Content Factory» en el navegador de Orca."
+      },
+      "busy_one": "Hay trabajo del navegador en curso ({{count}} operación). El transporte podrá cambiarse cuando termine.",
+      "busy_other": "Hay trabajo del navegador en curso ({{count}} operaciones). El transporte podrá cambiarse cuando termine.",
+      "busy_many": "Hay trabajo del navegador en curso ({{count}} operaciones). El transporte podrá cambiarse cuando termine."
+    },
+    "mode": {
+      "browser_assisted": "Asistido",
+      "browser_automated": "Automatizado",
+      "api": "API oficial",
+      "local": "Local"
+    },
+    "reason": {
+      "planned": "Planificado",
+      "terms_unreviewed": "Términos sin revisar",
+      "not_configured": "Sin configurar",
+      "transport_unsupported": "No disponible en este transporte",
+      "paid_disabled": "Pago desactivado",
+      "account_unverified": "Cuenta sin verificar"
+    },
+    "reasonHelp": {
+      "planned": "Previsto en el diseño, aún sin construir. No se envía nada a este sitio.",
+      "terms_unreviewed": "Sus términos no se han revisado para uso automatizado, así que está desactivado mientras la política de términos esté activa.",
+      "not_configured": "Añade lo que necesita (una clave o un servidor) para usarlo.",
+      "transport_unsupported": "Este proveedor aún no puede usar pestañas del transporte seleccionado. Cambia a Extensión para usarlo.",
+      "paid_disabled": "La generación multimedia de pago está desactivada para este proveedor.",
+      "account_unverified": "Inicia sesión en Ajustes. Esta página no comprueba la sesión."
+    },
+    "capability": {
+      "text": "Texto",
+      "image": "Imagen",
+      "video": "Vídeo",
+      "audio": "Audio",
+      "other": "Otras capacidades (embeddings, 3D, mejora…)",
+      "tbd": "Capacidades por definir"
+    },
+    "status": {
+      "transport": "Transporte",
+      "configured": "Configurado",
+      "tab": "Pestaña",
+      "session": "Sesión",
+      "connected": "conectado",
+      "disconnected": "sin conexión",
+      "yes": "sí",
+      "no": "no",
+      "tabByExtension": "pestaña abierta en Chrome",
+      "tabNone": "ninguna autorizada",
+      "tabReady": "autorizada",
+      "tabMissing": "no encontrada",
+      "unverifiable": "sin verificar (inicia sesión a mano)"
+    },
+    "actions": {
+      "openSignInTab": "Abrir pestaña de inicio de sesión",
+      "newSignInTab": "Nueva pestaña de inicio de sesión",
+      "showTab": "Mostrar pestaña",
+      "revoke": "Retirar",
+      "pageIdPlaceholder": "Id de pestaña de Orca",
+      "authorize": "Autorizar"
+    },
+    "sections": {
+      "browser": "Navegador (asistido)",
+      "browserHelp": "Sitios que usas con tu sesión. NodeTool prepara el prompt y tú terminas a mano.",
+      "api": "API oficiales",
+      "apiHelp": "Se facturan por llamada. La generación multimedia de pago sigue desactivada hasta que actives un proveedor.",
+      "local": "Modelos locales",
+      "localHelp": "Se ejecutan en este equipo. Los modelos se gestionan en el Gestor de modelos."
+    },
+    "api": {
+      "keySaved": "Clave guardada",
+      "noKey": "Sin clave",
+      "addKey": "Añadir clave",
+      "paidMedia": "Multimedia de pago",
+      "configuredOnly": "Solo configurados",
+      "search": "Buscar proveedores",
+      "empty": "Ningún proveedor coincide",
+      "confirmTitle": "¿Activar la multimedia de pago para {{provider}}?",
+      "confirmBody": "Las generaciones de imagen, vídeo y audio con este proveedor pueden tener coste. Puedes desactivarlo aquí en cualquier momento.",
+      "confirm": "Activar",
+      "cancel": "Cancelar",
+      "account": "Cuenta (sin verificar aquí)",
+      "manageAccount": "Gestionar cuenta"
+    },
+    "local": {
+      "manage": "Gestionar modelos",
+      "configured": "listo",
+      "notConfigured": "sin configurar",
+      "ollama": {
+        "connected": "en marcha",
+        "unreachable": "detenido",
+        "unavailable": "no instalado"
+      },
+      "install": {
+        "installed": "instalado",
+        "missing": "no instalado",
+        "installing": "instalando"
+      }
+    },
+    "link": {
+      "title": "Provider Manager",
+      "body": "Transporte, proveedores de navegador y pestañas autorizadas, multimedia de pago y modelos locales en un solo lugar.",
+      "open": "Abrir"
     }
   }
 }

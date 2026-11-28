@@ -80,6 +80,7 @@ import ToolPermissionsSettings, {
   toolPermissionGroupAnchor
 } from "../settings/ToolPermissionsSettings";
 import { useToolPermissions } from "../../serverState/useToolPermissions";
+import ProviderManagerLink from "../provider_manager/ProviderManagerLink";
 import {
   SETTINGS_TAB_ITEMS,
   matchesSearch,
@@ -1251,6 +1252,7 @@ function SettingsPage() {
                 </TabPanel>
 
                 <TabPanel section="providers" current={section}>
+                  {!isCloudProfile() && <ProviderManagerLink />}
                   <APIKeysTabContent searchTerm={searchTerm} />
                   <Box sx={{ marginTop: theme.spacing(SPACING.xxl) }}>
                     <SecurityNotice />

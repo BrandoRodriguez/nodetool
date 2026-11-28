@@ -10,7 +10,8 @@
  * Without the variable, providers behave as they always have.
  */
 
-import { formatManualStepMessage, type ProviderAccessMode } from "@nodetool-ai/protocol";
+import { factoryBrowserProvider, formatManualStepMessage, type ProviderAccessMode } from "@nodetool-ai/protocol";
+import { getRegisteredProvider } from "./provider-registry.js";
 
 export interface BrowserProviderTerms {
   providerId: string;
@@ -54,30 +55,63 @@ export function automationAllowed(providerId: string, env: NodeJS.ProcessEnv = p
   return terms !== undefined && terms.automatedSubmission && terms.automatedRetrieval;
 }
 
-/** Providers that run on this machine. */
+/**
+ * Local engines, by id: the fallback for a provider not registered in this
+ * process. A registered provider is classified by where its registration says
+ * inference runs.
+ */
 const LOCAL_PROVIDERS = new Set([
   "ollama",
-  "llama_cpp",
   "lmstudio",
+  "llama_cpp",
+  "node_llama_cpp",
+  "stable_diffusion_cpp",
+  "wangp",
+  "whisper_cpp",
+  "whisper_cpp_server",
   "vllm",
-  "mlx",
-  "transformers_js",
   "huggingface",
-  "comfy",
-  "wan2gp",
-  "local"
+  "transformers_js"
 ]);
 
 /**
  * How a provider is reached here: a site driven by hand or by program, an
  * official API, or a local model. Browser providers depend on the terms
- * policy; everything else is classified by id.
+ * policy; the others follow their registration (`local_service` and
+ * `in_process` run on this machine).
  */
 export function providerAccessMode(providerId: string, env: NodeJS.ProcessEnv = process.env): ProviderAccessMode {
-  if (BROWSER_PROVIDER_TERMS[providerId]) {
+  if (BROWSER_PROVIDER_TERMS[providerId] || factoryBrowserProvider(providerId)) {
     return automationAllowed(providerId, env) ? "browser_automated" : "browser_assisted";
   }
+  const access = getRegisteredProvider(providerId)?.metadata.access;
+  if (access === "local_service" || access === "in_process") return "local";
+  if (access === "remote_api") return "api";
   return LOCAL_PROVIDERS.has(providerId) ? "local" : "api";
+}
+
+/**
+ * A browser provider whose site terms have not been reviewed, while the terms
+ * policy is on. Nothing was sent to the site.
+ */
+export class ProviderTermsUnreviewedError extends Error {
+  readonly providerId: string;
+
+  constructor(providerId: string, name: string) {
+    super(
+      `${name} is not available while the provider terms policy is on: its site's terms have not been reviewed ` +
+        "for automated use. Nothing was sent. Use ChatGPT in assisted mode, an official API, or a local model."
+    );
+    this.name = "ProviderTermsUnreviewedError";
+    this.providerId = providerId;
+  }
+}
+
+/** Throws for a browser provider the terms policy does not allow to run here. */
+export function assertBrowserProviderAllowed(providerId: string, env: NodeJS.ProcessEnv = process.env): void {
+  if (!enforceProviderTerms(env)) return;
+  const entry = factoryBrowserProvider(providerId);
+  if (entry && entry.integration !== "available") throw new ProviderTermsUnreviewedError(providerId, entry.name);
 }
 
 /**
